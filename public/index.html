@@ -236,7 +236,7 @@ button {
 @media (max-width: 800px) { .draft-cols { grid-template-columns: 1fr; } }
 
 /* ── Pack grid ── */
-.pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(180px, 46vw), 1fr)); gap: .75rem; }
+.pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, 42vw), 1fr)); gap: .75rem; }
 .draft-body { padding: .9rem; }
 
 /* ── Card ── */
@@ -1039,7 +1039,7 @@ async function renderPack(pack, setName){
     // Tap name to preview (name element survives innerHTML replacement)
     const nameEl = div.querySelector('.card-name');
     nameEl.addEventListener('click', ()=>openModal(card,'draft'));
-    nameEl.addEventListener('touchend', e=>{e.preventDefault();openModal(card,'draft');});
+    nameEl.addEventListener('touchend', e=>{if(!isTapNotScroll())return;e.preventDefault();openModal(card,'draft');});
     grid.appendChild(div);
     return{div,card};
   });
@@ -1054,7 +1054,7 @@ async function renderPack(pack, setName){
     const tappable = wrap.firstElementChild;
     if(tappable){
       tappable.addEventListener('click', ()=>openModal(card,'draft'));
-      tappable.addEventListener('touchend', e=>{e.preventDefault();openModal(card,'draft');});
+      tappable.addEventListener('touchend', e=>{if(!isTapNotScroll())return;e.preventDefault();openModal(card,'draft');});
     }
   }));
 }
@@ -1078,25 +1078,46 @@ function pickCard(card){
 
 async function renderPool(){
   const container=document.getElementById('poolContainer');
-  const count=S.drafted.length;
-  document.getElementById('poolCount').textContent=`${count} card${count!==1?'s':''}`;
-  if(!count){container.innerHTML='<div class="empty">Drafted cards will appear here.</div>';return;}
+
+  // Group drafted cards by name, count available (not yet in main/side deck)
+  const grouped={};
+  for(const card of S.drafted){
+    if(!grouped[card.name]) grouped[card.name]={card,total:0};
+    grouped[card.name].total++;
+  }
+  // Subtract cards already moved to decks
+  for(const e of S.mainDeck) if(grouped[e.name]) grouped[e.name].inDeck=(grouped[e.name].inDeck||0)+e.qty;
+  for(const e of S.sideDeck) if(grouped[e.name]) grouped[e.name].inDeck=(grouped[e.name].inDeck||0)+e.qty;
+
+  // Available = total drafted minus what's already in decks
+  const available = Object.values(grouped).filter(g=>(g.total-(g.inDeck||0))>0);
+  const totalAvail = available.reduce((s,g)=>s+(g.total-(g.inDeck||0)),0);
+
+  document.getElementById('poolCount').textContent=`${totalAvail} card${totalAvail!==1?'s':''}`;
+  if(!available.length){container.innerHTML='<div class="empty">Drafted cards will appear here.</div>';return;}
+
   const order=['Secret Rare','Ultra Rare','Super Rare','Rare','Common'];
-  const sorted=[...S.drafted].sort((a,b)=>(order.indexOf(a.rarity)-order.indexOf(b.rarity))||a.name.localeCompare(b.name));
+  available.sort((a,b)=>(order.indexOf(a.card.rarity)-order.indexOf(b.card.rarity))||a.card.name.localeCompare(b.card.name));
+
   const list=document.createElement('div'); list.className='pool-list';
   container.innerHTML='';
-  const items=sorted.map(card=>{
+
+  const items=available.map(({card,total,inDeck})=>{
+    const avail=total-(inDeck||0);
     const div=document.createElement('div'); div.className='pool-item';
     div.innerHTML=`
-      <img src="" alt="${esc(card.name)}" style="opacity:.3;cursor:zoom-in;">
-      <div class="pool-item-info" style="cursor:zoom-in;"><div class="pool-item-name">${esc(card.name)}</div><div class="card-rarity ${rc(card.rarity)}">${esc(card.rarity||'')}</div></div>
+      <img src="" alt="${esc(card.name)}" style="opacity:.3;cursor:zoom-in;flex-shrink:0;">
+      <div class="pool-item-info" style="cursor:zoom-in;">
+        <div class="pool-item-name">${avail>1?`<span style="color:var(--gold);font-weight:700;margin-right:.3rem;">${avail}x</span>`:''}${esc(card.name)}</div>
+        <div class="card-rarity ${rc(card.rarity)}">${esc(card.rarity||'')}</div>
+      </div>
       <button class="btn-outline" style="font-size:.76rem;min-height:38px;">→ Main</button>
       <button class="btn-ghost"   style="font-size:.76rem;min-height:38px;">Side</button>
     `;
     div.querySelector('img').addEventListener('click',()=>openModal(card,'pool'));
     div.querySelector('.pool-item-info').addEventListener('click',()=>openModal(card,'pool'));
-    div.querySelectorAll('button')[0].addEventListener('click',()=>addToDeck(card,'main'));
-    div.querySelectorAll('button')[1].addEventListener('click',()=>addToDeck(card,'side'));
+    div.querySelectorAll('button')[0].addEventListener('click',()=>{ addToDeck(card,'main'); renderPool(); });
+    div.querySelectorAll('button')[1].addEventListener('click',()=>{ addToDeck(card,'side'); renderPool(); });
     list.appendChild(div);
     return{div,card};
   });
@@ -1111,16 +1132,21 @@ async function renderPool(){
 // ══ Deck builder ══════════════════════════════════════════════════════════════
 function addToDeck(card,zone){
   const deck=zone==='main'?S.mainDeck:S.sideDeck, max=zone==='main'?3:15;
+  // Count how many of this card are available in pool
+  const totalDrafted=S.drafted.filter(c=>c.name===card.name).length;
+  const inMain=(S.mainDeck.find(e=>e.name===card.name)||{qty:0}).qty;
+  const inSide=(S.sideDeck.find(e=>e.name===card.name)||{qty:0}).qty;
+  if(inMain+inSide>=totalDrafted) return toast(`No more copies of ${card.name} in pool`,'warn');
   const ex=deck.find(e=>e.name===card.name);
-  if(ex){if(ex.qty>=max)return toast(`Max copies for ${card.name}`,'warn');ex.qty++;}
+  if(ex){if(ex.qty>=max)return toast(`Max ${max} copies in ${zone} deck`,'warn');ex.qty++;}
   else deck.push({name:card.name,rarity:card.rarity,qty:1});
-  renderDeck(zone);updateDeckStats();switchTab(zone);
+  renderDeck(zone);renderPool();updateDeckStats();switchTab(zone);
 }
 function removeFromDeck(name,zone){
   const deck=zone==='main'?S.mainDeck:S.sideDeck, idx=deck.findIndex(e=>e.name===name);
   if(idx===-1)return;
   deck[idx].qty>1?deck[idx].qty--:deck.splice(idx,1);
-  renderDeck(zone);updateDeckStats();
+  renderDeck(zone);renderPool();updateDeckStats();
 }
 function clearDeck(zone){ if(zone==='main')S.mainDeck=[];else S.sideDeck=[]; renderDeck(zone);updateDeckStats(); }
 function renderDeck(zone){
@@ -1437,6 +1463,13 @@ const EMBEDDED_SETS = [
 S.availableSets = EMBEDDED_SETS;
 
 // Also try to fetch from server (in case server has more/updated sets)
+// ── Scroll guard for mobile tap-vs-scroll detection ─────────────────────────
+let _lastScrollTime = 0;
+let _touchStartY = 0;
+document.addEventListener('touchstart', e=>{ _touchStartY=e.touches[0].clientY; }, {passive:true});
+document.addEventListener('touchmove', ()=>{ _lastScrollTime=Date.now(); }, {passive:true});
+function isTapNotScroll(){ return (Date.now()-_lastScrollTime)>180; }
+
 fetch('/api/sets').then(r=>r.json()).then(serverSets=>{
   // Merge: server sets override embedded ones with same id, extras are appended
   const merged = [...EMBEDDED_SETS];
@@ -1520,10 +1553,12 @@ async function openModal(card, mode){
     // Card text
     document.getElementById('modalDesc').textContent = info.desc || '—';
 
-    // ATK/DEF for monsters
+    // ATK/DEF for monsters — remove any old one first
+    document.querySelectorAll('.modal-atkdef').forEach(el=>el.remove());
     if(info.atk !== undefined){
       const atkdef = document.createElement('div');
-      atkdef.style.cssText = 'font-size:.82rem;color:var(--gold);font-weight:600;border-top:1px solid var(--border);padding-top:.5rem;';
+      atkdef.className = 'modal-atkdef';
+      atkdef.style.cssText = 'font-size:.82rem;color:var(--gold);font-weight:600;border-top:1px solid var(--border);padding-top:.5rem;margin-top:.2rem;';
       atkdef.textContent = `ATK ${info.atk ?? '?'} / DEF ${info.def ?? '?'}`;
       document.getElementById('modalDesc').after(atkdef);
     }
@@ -1537,9 +1572,7 @@ function closeModal(e){
   if(e && e.target !== document.getElementById('cardModal')) return;
   document.getElementById('cardModal').classList.remove('open');
   document.body.style.overflow = '';
-  // Clean up any ATK/DEF element added dynamically
-  const atkdef = document.querySelector('#cardModal .modal-body div[style*="ATK"]');
-  if(atkdef) atkdef.remove();
+  document.querySelectorAll('.modal-atkdef').forEach(el=>el.remove());
 }
 
 // Close on Escape key

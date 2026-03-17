@@ -11,361 +11,256 @@ const PORT   = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static("public"));
 
-// ── Card data ────────────────────────────────────────────────────────────────
-
 const { sets } = JSON.parse(fs.readFileSync("./cards.json", "utf8"));
 const setMap   = new Map(sets.map(s => [s.id, s]));
 
-// ── Box / pack generation ────────────────────────────────────────────────────
+// ── Pack generation ───────────────────────────────────────────────────────────
 
-const PACK_COMMONS = 7;
-const BOX_SIZE     = 24;
+const PACK_COMMONS = 7, BOX_SIZE = 24;
 
 function shuffle(arr) {
   const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+  for (let i = a.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
   }
   return a;
 }
+function rnd(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function byR(cards,r){ return cards.filter(c=>c.rarity===r); }
+function fb(a,b){ return a.length?a:b; }
 
-function pickRand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-function byRarity(cards, r) { return cards.filter(c => c.rarity === r); }
-function fallback(a, b) { return a.length ? a : b; }
-
-function generateBoxPacks(set, packCount) {
-  const commons = byRarity(set.cards, "Common");
-  const rares   = byRarity(set.cards, "Rare");
-  const supers  = byRarity(set.cards, "Super Rare");
-  const ultras  = byRarity(set.cards, "Ultra Rare");
-  const secrets = byRarity(set.cards, "Secret Rare");
-
-  const allPacks = [];
-  let remaining  = packCount;
-
-  while (remaining > 0) {
-    const boxPacks = Math.min(remaining, BOX_SIZE);
-    remaining -= boxPacks;
-    const ratio = boxPacks / BOX_SIZE;
-
-    const secretCount = Math.random() < ratio * 0.33 ? 1 : 0;
-    const ultraCount  = Math.round(ratio * 1);
-    const superCount  = Math.max(0, Math.round(ratio * 3));
-
-    const foilSlots = [
-      ...Array.from({ length: secretCount }, () => pickRand(fallback(secrets, fallback(ultras, rares)))),
-      ...Array.from({ length: ultraCount  }, () => pickRand(fallback(ultras,  fallback(supers, rares)))),
-      ...Array.from({ length: superCount  }, () => pickRand(fallback(supers,  fallback(ultras, rares)))),
+function genPacks(set, count) {
+  const commons=byR(set.cards,'Common'), rares=byR(set.cards,'Rare'),
+        supers=byR(set.cards,'Super Rare'), ultras=byR(set.cards,'Ultra Rare'),
+        secrets=byR(set.cards,'Secret Rare'), base=set.cards;
+  const all=[]; let rem=count;
+  while(rem>0){
+    const bp=Math.min(rem,BOX_SIZE); rem-=bp; const ratio=bp/BOX_SIZE;
+    const sc=Math.random()<ratio*.33?1:0, uc=Math.round(ratio), spc=Math.max(0,Math.round(ratio*3));
+    const foils=[
+      ...Array.from({length:sc},()=>rnd(fb(secrets,fb(ultras,fb(rares,base))))),
+      ...Array.from({length:uc},()=>rnd(fb(ultras,fb(supers,fb(rares,base))))),
+      ...Array.from({length:spc},()=>rnd(fb(supers,fb(ultras,fb(rares,base))))),
     ];
-    while (foilSlots.length < boxPacks)
-      foilSlots.push(rares.length ? pickRand(rares) : pickRand(set.cards));
-
-    const shuffledFoils = shuffle(foilSlots).slice(0, boxPacks);
-
-    for (let p = 0; p < boxPacks; p++) {
-      const pack = [];
-      for (let i = 0; i < PACK_COMMONS; i++)
-        pack.push(commons.length ? pickRand(commons) : pickRand(set.cards));
-      if (rares.length) pack.push(pickRand(rares));
-      pack.push(shuffledFoils[p]);
-      allPacks.push(pack);
+    while(foils.length<bp) foils.push(rares.length?rnd(rares):rnd(base));
+    const sf=shuffle(foils).slice(0,bp);
+    for(let p=0;p<bp;p++){
+      const pack=[];
+      for(let i=0;i<PACK_COMMONS;i++) pack.push(commons.length?rnd(commons):rnd(base));
+      if(rares.length) pack.push(rnd(rares));
+      pack.push(sf[p]);
+      all.push(pack);
     }
   }
-  return allPacks;
+  return all;
 }
 
-// ── Lobby state ──────────────────────────────────────────────────────────────
+// ── Lobby ─────────────────────────────────────────────────────────────────────
 //
-// TRUE passing booster draft:
-//   - Players sit in a circle. Seat 0, 1, 2, ...
-//   - Each round: every player picks 1 card from the pack at their seat.
-//   - Then all packs rotate one seat to the left.
-//   - When all packs in the current batch are empty, everyone opens the next pack.
-//   - Draft ends when all packs are exhausted.
+// ASYNC PASSING DRAFT — no player ever waits for others.
 //
-// Server drives the round:
-//   - Sends each player their current pack via { type:"pack" }
-//   - Waits for every player to send { type:"pick" }
-//   - Once all picks are in, rotates packs and sends the next round
+// Each player has a personal queue of packs (inbox).
+// When a player picks from a pack, the remainder is pushed into the next
+// player's inbox. Players work through their inbox independently.
+// This mirrors real-life draft tables where you can pick as fast as you want
+// and packs pile up in front of you if you're slow.
 //
-// Lobby {
-//   code, hostId, phase, config
-//   players: Map<id, Player>
-//   seats: Card[][]          — seat[i] is the live pack at player i's seat
-//   packStacks: Card[][][]   — packStacks[i] is player i's remaining unopened packs
-//   packNum: number
-//   totalPacks: number
-//   seatOrder: string[]      — player ids in seat order
+// Player {
+//   id, name, ws, drafted[],
+//   inbox: Card[][]   — packs waiting to be picked from, in order
+//   totalPacks: number — how many packs this player will see total
 // }
-//
-// Player { id, name, ws, drafted[], pickedThisRound: bool }
 
 const lobbies = new Map();
 
-function makeCode(len = 6) {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+function makeCode(n=6){
+  const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({length:n},()=>c[Math.floor(Math.random()*c.length)]).join('');
+}
+function makePlayer(id,name,ws){
+  return {id,name,ws,drafted:[],inbox:[],totalPacks:0,pickedFrom:0};
 }
 
-function makePlayer(id, name, ws) {
-  return { id, name, ws, drafted: [], pickedThisRound: false };
+function send(ws,msg){
+  if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(msg));
 }
-
-// ── WebSocket helpers ─────────────────────────────────────────────────────────
-
-function send(ws, msg) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+function broadcast(lobby,msg){
+  const raw=JSON.stringify(msg);
+  for(const p of lobby.players.values())
+    if(p.ws&&p.ws.readyState===WebSocket.OPEN) p.ws.send(raw);
 }
-
-function lobbySnapshot(lobby) {
-  const players = [...lobby.players.values()].map(p => ({
-    id: p.id,
-    name: p.name,
-    drafted: p.drafted.length,
-    packsLeft: lobby.packStacks
-      ? (lobby.packStacks[lobby.seatOrder?.indexOf(p.id)] || []).length
-      : 0,
-    online: p.ws && p.ws.readyState === WebSocket.OPEN,
-  }));
+function snap(lobby){
   return {
-    type: "lobby_state",
-    code: lobby.code,
-    phase: lobby.phase,
-    hostId: lobby.hostId,
-    config: lobby.config,
-    players,
+    type:'lobby_state', code:lobby.code, phase:lobby.phase, hostId:lobby.hostId,
+    config:lobby.config,
+    players:[...lobby.players.values()].map(p=>({
+      id:p.id, name:p.name, drafted:p.drafted.length,
+      packsLeft:p.inbox.length,
+      online:p.ws&&p.ws.readyState===WebSocket.OPEN,
+    })),
   };
 }
 
-function broadcast(lobby, msg) {
-  const raw = JSON.stringify(msg);
-  for (const p of lobby.players.values())
-    if (p.ws && p.ws.readyState === WebSocket.OPEN) p.ws.send(raw);
+// ── Draft logic ───────────────────────────────────────────────────────────────
+
+function startDraft(lobby){
+  const players=[...lobby.players.values()];
+  const N=players.length;
+
+  // Build full pack pool and deal round-robin into player inboxes
+  const pool=shuffle(lobby.packPool);
+  players.forEach(p=>{ p.inbox=[]; p.drafted=[]; p.pickedFrom=0; });
+  pool.forEach((pack,i)=> players[i%N].inbox.push([...pack]));
+
+  // totalPacks = how many packs each player will eventually see
+  // Each pack travels all the way around the table (N players pick from it)
+  // but each player's inbox starts with pool.length/N packs and grows as
+  // picked packs arrive. totalPacks = cards per pack (since you pick 1 per pack visit)
+  // For display we track packs opened
+  const perPlayer = Math.ceil(pool.length / N);
+  players.forEach(p=>{ p.totalPacks = perPlayer * (pool.length > 0 ? 1 : 0); });
+
+  lobby.phase='drafting';
+  lobby.seatOrder=players.map(p=>p.id);
+  lobby.N=N;
+
+  broadcast(lobby, snap(lobby));
+
+  // Send each player their first pack
+  for(const p of players) deliverNext(lobby, p);
 }
 
-// ── Draft engine ──────────────────────────────────────────────────────────────
-
-function removeCard(pack, card) {
-  const idx = pack.findIndex(c => c.name === card.name && c.rarity === card.rarity);
-  if (idx !== -1) pack.splice(idx, 1);
+function playerIdx(lobby, playerId){
+  return lobby.seatOrder.indexOf(playerId);
 }
 
-function startDraft(lobby) {
-  const playerList = [...lobby.players.values()];
-  const N = playerList.length;
-
-  // Deal packs round-robin into each player's stack
-  lobby.seatOrder  = playerList.map(p => p.id);
-  lobby.packStacks = Array.from({ length: N }, () => []);
-  shuffle(lobby.packPool).forEach((pack, i) => {
-    lobby.packStacks[i % N].push([...pack]);
+// Send the next pack in a player's inbox if they have one and aren't currently holding one
+function deliverNext(lobby, player){
+  if(player.currentPack) return; // already has a pack open
+  if(player.inbox.length===0){
+    // No more packs — this player is done
+    send(player.ws,{type:'draft_done', drafted:player.drafted});
+    checkAllDone(lobby);
+    return;
+  }
+  player.currentPack=[...player.inbox.shift()];
+  player.pickedFrom++;
+  send(player.ws,{
+    type:'pack',
+    pack:player.currentPack,
+    packNum:player.pickedFrom,
+    cardsLeft:player.currentPack.length,
   });
-
-  lobby.totalPacks = Math.max(...lobby.packStacks.map(s => s.length));
-  lobby.packNum    = 0;
-  lobby.seats      = Array(N).fill(null).map(() => []);
-
-  openNextPacks(lobby);
 }
 
-function openNextPacks(lobby) {
-  const N = lobby.seatOrder.length;
-  const anyLeft = lobby.packStacks.some(s => s.length > 0);
-
-  if (!anyLeft) {
-    // Draft complete
-    lobby.phase = "done";
-    broadcast(lobby, lobbySnapshot(lobby));
-    for (const p of lobby.players.values()) {
-      send(p.ws, { type: "draft_done", drafted: p.drafted });
-    }
-    return;
+function checkAllDone(lobby){
+  const allDone=[...lobby.players.values()].every(p=>!p.currentPack&&p.inbox.length===0);
+  if(allDone){
+    lobby.phase='done';
+    broadcast(lobby,snap(lobby));
   }
-
-  lobby.packNum++;
-  for (let i = 0; i < N; i++) {
-    lobby.seats[i] = lobby.packStacks[i].length > 0
-      ? [...lobby.packStacks[i].shift()]
-      : [];
-  }
-
-  sendPacksToPlayers(lobby);
 }
 
-function sendPacksToPlayers(lobby) {
-  // Reset pick flags
-  for (const p of lobby.players.values()) p.pickedThisRound = false;
-
-  const N = lobby.seatOrder.length;
-
-  // Check if any seat has cards — if not, rotate and open next
-  const anyCards = lobby.seats.some(s => s.length > 0);
-  if (!anyCards) {
-    openNextPacks(lobby);
-    return;
-  }
-
-  broadcast(lobby, lobbySnapshot(lobby));
-
-  // Send each player their current pack
-  for (let i = 0; i < N; i++) {
-    const playerId = lobby.seatOrder[i];
-    const player   = lobby.players.get(playerId);
-    const pack     = lobby.seats[i];
-
-    if (!player) continue;
-
-    if (pack.length === 0) {
-      // This player has nothing to pick this round — mark as auto-picked
-      player.pickedThisRound = true;
-      send(player.ws, { type: "waiting_for_others" });
-    } else {
-      send(player.ws, {
-        type: "pack",
-        pack,
-        packNum: lobby.packNum,
-        totalPacks: lobby.totalPacks,
-        cardsLeft: pack.length,
-      });
-    }
-  }
-
-  // If everyone was auto-skipped (all empty), advance
-  checkRoundComplete(lobby);
+// After a player picks, pass the remainder to the next seat
+function passPackLeft(lobby, fromPlayerId, remainingPack){
+  if(remainingPack.length===0) return; // pack exhausted, nothing to pass
+  const N=lobby.N;
+  const idx=playerIdx(lobby,fromPlayerId);
+  const nextIdx=(idx+1)%N;
+  const nextId=lobby.seatOrder[nextIdx];
+  const nextPlayer=lobby.players.get(nextId);
+  if(!nextPlayer) return;
+  nextPlayer.inbox.push([...remainingPack]);
+  // If the next player has no current pack, deliver immediately
+  if(!nextPlayer.currentPack) deliverNext(lobby, nextPlayer);
 }
 
-function checkRoundComplete(lobby) {
-  const allPicked = [...lobby.players.values()].every(p => p.pickedThisRound);
-  if (!allPicked) return;
+// ── WebSocket handler ─────────────────────────────────────────────────────────
 
-  // Rotate packs left: seat[i] gets what was at seat[(i-1+N)%N]
-  const N    = lobby.seatOrder.length;
-  const tmp  = lobby.seats.map(s => [...s]);
-  for (let i = 0; i < N; i++) {
-    lobby.seats[i] = tmp[(i - 1 + N + N) % N];
-  }
+wss.on('connection', ws=>{
+  let playerId=null, lobbyCode=null;
 
-  sendPacksToPlayers(lobby);
-}
+  ws.on('message', raw=>{
+    let msg; try{msg=JSON.parse(raw);}catch{return;}
 
-// ── WebSocket connection handler ──────────────────────────────────────────────
-
-wss.on("connection", ws => {
-  let playerId  = null;
-  let lobbyCode = null;
-
-  ws.on("message", raw => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
-
-    // ── CREATE ───────────────────────────────────────────────────
-    if (msg.type === "create_lobby") {
-      playerId  = makeCode(8);
-      const code = makeCode();
-      lobbyCode  = code;
-      const lobby = {
-        code, hostId: playerId, phase: "waiting",
-        config: [], packPool: [],
-        players: new Map(),
-        seats: [], packStacks: [], seatOrder: [],
-        packNum: 0, totalPacks: 0,
+    if(msg.type==='create_lobby'){
+      playerId=makeCode(8);
+      const code=makeCode(); lobbyCode=code;
+      const lobby={
+        code,hostId:playerId,phase:'waiting',
+        config:[],packPool:[],
+        players:new Map(),seatOrder:[],N:0,
       };
-      lobby.players.set(playerId, makePlayer(playerId, (msg.name || "Host").trim().slice(0, 24), ws));
-      lobbies.set(code, lobby);
-      send(ws, { type: "created", code, playerId, isHost: true });
-      broadcast(lobby, lobbySnapshot(lobby));
+      lobby.players.set(playerId,makePlayer(playerId,(msg.name||'Host').trim().slice(0,24),ws));
+      lobbies.set(code,lobby);
+      send(ws,{type:'created',code,playerId,isHost:true});
+      broadcast(lobby,snap(lobby));
       return;
     }
 
-    // ── JOIN ─────────────────────────────────────────────────────
-    if (msg.type === "join_lobby") {
-      const code  = (msg.code || "").toUpperCase().trim();
-      const lobby = lobbies.get(code);
-      if (!lobby)                    return send(ws, { type: "error", msg: "Lobby not found." });
-      if (lobby.phase !== "waiting") return send(ws, { type: "error", msg: "Draft already started." });
-      playerId  = makeCode(8);
-      lobbyCode = code;
-      lobby.players.set(playerId, makePlayer(playerId, (msg.name || "Player").trim().slice(0, 24), ws));
-      send(ws, { type: "joined", code, playerId, isHost: false });
-      broadcast(lobby, lobbySnapshot(lobby));
+    if(msg.type==='join_lobby'){
+      const code=(msg.code||'').toUpperCase().trim();
+      const lobby=lobbies.get(code);
+      if(!lobby) return send(ws,{type:'error',msg:'Lobby not found.'});
+      if(lobby.phase!=='waiting') return send(ws,{type:'error',msg:'Draft already started.'});
+      playerId=makeCode(8); lobbyCode=code;
+      lobby.players.set(playerId,makePlayer(playerId,(msg.name||'Player').trim().slice(0,24),ws));
+      send(ws,{type:'joined',code,playerId,isHost:false});
+      broadcast(lobby,snap(lobby));
       return;
     }
 
-    const lobby  = lobbies.get(lobbyCode);
-    const player = lobby?.players.get(playerId);
-    if (!lobby || !player) return;
+    const lobby=lobbies.get(lobbyCode);
+    const player=lobby?.players.get(playerId);
+    if(!lobby||!player) return;
 
-    // ── SET CONFIG (host) ────────────────────────────────────────
-    if (msg.type === "set_config") {
-      if (playerId !== lobby.hostId) return;
-      lobby.config = Array.isArray(msg.config) ? msg.config : [];
-      broadcast(lobby, lobbySnapshot(lobby));
+    if(msg.type==='set_config'){
+      if(playerId!==lobby.hostId) return;
+      lobby.config=Array.isArray(msg.config)?msg.config:[];
+      broadcast(lobby,snap(lobby));
       return;
     }
 
-    // ── START DRAFT (host) ───────────────────────────────────────
-    if (msg.type === "start_draft") {
-      if (playerId !== lobby.hostId) return;
-      if (!lobby.config.length) return send(ws, { type: "error", msg: "Add at least one set first." });
-
-      lobby.packPool = [];
-      for (const { set: setId, packs } of lobby.config) {
-        const set = setMap.get(setId);
-        if (!set) return send(ws, { type: "error", msg: `Unknown set: ${setId}` });
-        if (!Number.isInteger(packs) || packs < 1)
-          return send(ws, { type: "error", msg: `Invalid pack count for ${setId}` });
-        lobby.packPool.push(...generateBoxPacks(set, packs));
+    if(msg.type==='start_draft'){
+      if(playerId!==lobby.hostId) return;
+      if(!lobby.config.length) return send(ws,{type:'error',msg:'Add at least one set first.'});
+      lobby.packPool=[];
+      for(const {set:setId,packs} of lobby.config){
+        const set=setMap.get(setId);
+        if(!set) return send(ws,{type:'error',msg:`Unknown set: ${setId}`});
+        lobby.packPool.push(...genPacks(set,packs));
       }
-
-      lobby.phase = "drafting";
       startDraft(lobby);
       return;
     }
 
-    // ── PICK ─────────────────────────────────────────────────────
-    if (msg.type === "pick") {
-      if (lobby.phase !== "drafting") return;
-      if (player.pickedThisRound)     return; // ignore duplicate picks
-      const card = msg.card;
-      if (!card?.name) return;
-
-      const seatIdx = lobby.seatOrder.indexOf(playerId);
-      const pack    = lobby.seats[seatIdx];
-      if (!pack || pack.length === 0) return;
-
-      // Verify the card is actually in the pack
-      const cardIdx = pack.findIndex(c => c.name === card.name && c.rarity === card.rarity);
-      if (cardIdx === -1) return;
-
+    if(msg.type==='pick'){
+      if(lobby.phase!=='drafting'||!player.currentPack) return;
+      const card=msg.card;
+      if(!card?.name) return;
+      // Verify card is in current pack
+      const idx=player.currentPack.findIndex(c=>c.name===card.name&&c.rarity===card.rarity);
+      if(idx===-1) return;
       player.drafted.push(card);
-      pack.splice(cardIdx, 1);
-      player.pickedThisRound = true;
-
-      broadcast(lobby, lobbySnapshot(lobby));
-      checkRoundComplete(lobby);
+      player.currentPack.splice(idx,1);
+      const remainder=[...player.currentPack];
+      player.currentPack=null; // pack is no longer in hand
+      broadcast(lobby,snap(lobby));
+      // Pass remainder to next player
+      passPackLeft(lobby,playerId,remainder);
+      // Give this player their next pack from inbox
+      deliverNext(lobby,player);
       return;
     }
   });
 
-  ws.on("close", () => {
-    const lobby = lobbies.get(lobbyCode);
-    if (!lobby) return;
-    broadcast(lobby, lobbySnapshot(lobby));
-
-    // If it's the host and draft hasn't started, clean up after a delay
-    if (playerId === lobby.hostId && lobby.phase === "waiting") {
-      setTimeout(() => {
-        if (lobbies.get(lobbyCode) === lobby) lobbies.delete(lobbyCode);
-      }, 30000);
-    }
+  ws.on('close',()=>{
+    const lobby=lobbies.get(lobbyCode);
+    if(!lobby) return;
+    broadcast(lobby,snap(lobby));
   });
 });
 
-// ── REST ──────────────────────────────────────────────────────────────────────
-
-app.get("/api/sets", (_req, res) =>
-  res.json(sets.map(s => ({ id: s.id, name: s.name || s.id })))
-);
-
-server.listen(PORT, () => console.log(`YGO Draft → http://localhost:${PORT}`));
+app.get('/api/sets',(_,res)=>res.json(sets.map(s=>({id:s.id,name:s.name||s.id}))));
+server.listen(PORT,()=>console.log(`YGO Draft → http://localhost:${PORT}`));
