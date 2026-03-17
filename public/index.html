@@ -592,59 +592,98 @@ function aiPick(ai, pack) {
   return best||pack[0];
 }
 
-// ══ Offline draft ══════════════════════════════════════════════════════════════
+// ══ Offline booster draft engine ══════════════════════════════════════════════
+//
+// TRUE passing draft:
+//   - N players sit in a circle (index 0 = human, 1..N-1 = AI)
+//   - Everyone opens their first pack simultaneously
+//   - Pick 1 card, pass the rest to the left (index+1 mod N)
+//   - Continue until every card in the current round of packs is picked
+//   - Then everyone opens the next pack from their stack
+//   - Draft ends when all packs are empty
+
+const D = {};  // draft state, reset each game
+
 function startOfflineDraft(){
   const rows=[...document.querySelectorAll('#offlineSetRows .set-row')];
   if(!rows.length) return toast('Add at least one set.','warn');
   if(!S.availableSets.length) return toast('Sets not loaded yet — check your connection.','warn');
 
   const setMap=new Map(S.availableSets.map(s=>[s.id,s]));
-  let pool=[];
+  let allPacks=[];
   for(const row of rows){
     const setId=row.querySelector('select').value;
     const packs=parseInt(row.querySelector('input').value)||1;
     const set=setMap.get(setId);
     if(!set) return toast(`Unknown set: ${setId}`,'error');
-    pool.push(...genBoxPacks(set,packs));
+    allPacks.push(...genBoxPacks(set,packs));
   }
-  pool=shuffle(pool);
+  allPacks=shuffle(allPacks);
 
   const aiCount=parseInt(document.getElementById('aiCount').textContent)||0;
-  const total=1+aiCount;
-  const per=Math.floor(pool.length/total);
+  D.N = 1 + aiCount;
 
-  S.offlineQueue=pool.slice(0,per);
-  S.offlineIdx=0;
-  S.totalPacks=per;
+  // Deal packs round-robin into each player's stack
+  D.packStacks=Array.from({length:D.N},()=>[]);
+  allPacks.forEach((pack,i)=> D.packStacks[i % D.N].push([...pack]));
+
+  D.totalPacks = D.packStacks[0].length;
+  D.packNum    = 0;
+  D.seat       = Array(D.N).fill(null);  // live pack at each seat this round
+
+  S.aiPlayers=Array.from({length:aiCount},(_,i)=>({name:`AI ${i+1}`,drafted:[]}));
   S.drafted=[]; S.mainDeck=[]; S.sideDeck=[];
   S.mode='offline';
-
-  // AI drafts instantly
-  S.aiPlayers=Array.from({length:aiCount},(_,i)=>{
-    const ai={name:`AI ${i+1}`,drafted:[]};
-    const myPacks=pool.slice((i+1)*per,(i+2)*per);
-    for(const pack of myPacks) ai.drafted.push(aiPick(ai,pack));
-    return ai;
-  });
 
   showScreen('draft');
   renderDraftPlayers();
   renderDeck('main'); renderDeck('side'); updateDeckStats();
-  offlineNextPack();
+  draftOpenNextPacks();
 }
 
-function offlineNextPack(){
-  if(S.offlineIdx>=S.offlineQueue.length){
+// Open the next fresh pack for every player, starting a new passing round
+function draftOpenNextPacks(){
+  if(D.packStacks[0].length===0){
     document.getElementById('packContainer').innerHTML=
-      `<div class="empty" style="padding:3rem;">🎉 Draft complete!<br><br>${S.drafted.length} cards in your pool.</div>`;
+      `<div class="empty" style="padding:3rem;">&#127881; Draft complete!<br><br>You drafted ${S.drafted.length} cards.</div>`;
     document.getElementById('packProgress').textContent='Done';
+    renderDraftPlayers();
     return;
   }
-  const pack=S.offlineQueue[S.offlineIdx++];
-  document.getElementById('packProgress').textContent=`Pack ${S.offlineIdx} of ${S.totalPacks}`;
-  renderPack(pack);
+  D.packNum++;
+  for(let i=0;i<D.N;i++) D.seat[i]=[...D.packStacks[i].shift()];
+  draftAdvanceToHuman();
 }
 
+// AI players all pick from their current seat, then show the human theirs
+function draftAdvanceToHuman(){
+  for(let i=1;i<D.N;i++){
+    if(D.seat[i]&&D.seat[i].length>0){
+      const pick=aiPick(S.aiPlayers[i-1],D.seat[i]);
+      S.aiPlayers[i-1].drafted.push(pick);
+      D.seat[i]=D.seat[i].filter(c=>c!==pick);
+    }
+  }
+  renderDraftPlayers();
+
+  const humanPack=D.seat[0];
+  if(!humanPack||humanPack.length===0){
+    draftPassPacks();
+    return;
+  }
+  document.getElementById('packProgress').textContent=
+    `Pack ${D.packNum} of ${D.totalPacks} · ${humanPack.length} card${humanPack.length!==1?'s':''} remaining`;
+  renderPack(humanPack);
+}
+
+// After human picks, rotate all packs one seat to the left, then continue
+function draftPassPacks(){
+  const tmp=[...D.seat];
+  for(let i=0;i<D.N;i++) D.seat[i]=tmp[(i-1+D.N)%D.N];
+  const anyLeft=D.seat.some(p=>p&&p.length>0);
+  if(!anyLeft) draftOpenNextPacks();
+  else draftAdvanceToHuman();
+}
 // ══ Online ════════════════════════════════════════════════════════════════════
 function connectWS(onOpen){
   const proto=location.protocol==='https:'?'wss':'ws';
@@ -722,11 +761,12 @@ function updateOnlinePlayers(players){
 function renderDraftPlayers(){
   const el=document.getElementById('draftPlayerList'); el.innerHTML='';
   const you=document.createElement('div'); you.className='draft-player-row';
+  const youPacks=D.packStacks ? D.packStacks[0].length : 0;
   you.innerHTML=`<span class="dot dot-online"></span><span class="dpname">You</span><span class="dptag">${S.drafted.length} picked</span>`;
   el.appendChild(you);
-  S.aiPlayers.forEach(ai=>{
+  S.aiPlayers.forEach((ai,i)=>{
     const div=document.createElement('div'); div.className='draft-player-row';
-    div.innerHTML=`<span class="dot dot-ai"></span><span class="dpname">${esc(ai.name)}</span><span class="dptag">${ai.drafted.length} picked · done</span>`;
+    div.innerHTML=`<span class="dot dot-ai"></span><span class="dpname">${esc(ai.name)}</span><span class="dptag">${ai.drafted.length} picked</span>`;
     el.appendChild(div);
   });
 }
@@ -820,10 +860,15 @@ async function renderPack(pack){
 function pickCard(card){
   document.querySelectorAll('.card-btn').forEach(b=>b.disabled=true);
   S.drafted.push(card);
-  if(S.mode==='online') wsSend({type:'pick',card});
+  if(S.mode==='online'){
+    wsSend({type:'pick',card});
+  } else {
+    // Remove picked card from human's seat, then pass packs
+    D.seat[0]=D.seat[0].filter(c=>c!==card);
+  }
   renderPool(); updateDeckStats(); renderDraftPlayers();
   toast(`Picked: ${card.name}`);
-  if(S.mode==='offline') offlineNextPack();
+  if(S.mode==='offline') draftPassPacks();
 }
 
 async function renderPool(){
