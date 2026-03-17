@@ -6,8 +6,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>YGO Draft Simulator</title>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
+<title>YU-GI-OH! Draft</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display+SC:ital,wght@0,700;0,900;1,700;1,900&family=Cinzel:wght@400;600;900&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -78,11 +78,23 @@ header {
   background: linear-gradient(180deg,rgba(201,168,76,.08) 0%,transparent 100%);
 }
 header h1 {
-  font-family: 'Cinzel Decorative', cursive;
-  font-size: clamp(1.2rem, 5vw, 2.4rem); color: var(--gold);
-  text-shadow: 0 0 30px rgba(201,168,76,.4);
+  font-family: 'Playfair Display SC', 'Cinzel', Georgia, serif;
+  font-size: clamp(2rem, 7vw, 4rem);
+  font-weight: 900;
+  font-style: italic;
+  color: var(--gold);
+  letter-spacing: .12em;
+  text-shadow:
+    0 0 40px rgba(201,168,76,.5),
+    2px 2px 0 rgba(0,0,0,.8),
+    -1px -1px 0 rgba(139,90,20,.6);
+  line-height: 1;
 }
-header p { color: var(--dim); font-size: .85rem; margin-top: .2rem; letter-spacing: .04em; }
+.header-subtitle-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: .5rem; margin-top: .35rem; min-height: 1.4rem;
+}
+header p { color: var(--dim); font-size: .82rem; letter-spacing: .06em; }
 
 /* ── App ── */
 .app {
@@ -221,7 +233,7 @@ button {
 @media (max-width: 800px) { .draft-cols { grid-template-columns: 1fr; } }
 
 /* ── Pack grid ── */
-.pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(138px, 43vw), 1fr)); gap: .6rem; }
+.pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(180px, 46vw), 1fr)); gap: .75rem; }
 .draft-body { padding: .9rem; }
 
 /* ── Card ── */
@@ -234,8 +246,8 @@ button {
 .card-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .img-placeholder { position: absolute; inset: 0; display: grid; place-items: center; font-size: .7rem; color: var(--dim); text-align: center; padding: .4rem; }
 .card-info { padding: .4rem .45rem; flex: 1; display: flex; flex-direction: column; gap: .2rem; }
-.card-name { font-size: .78rem; font-weight: 600; line-height: 1.2; color: var(--text); }
-.card-rarity { font-size: .66rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.card-name { font-size: .88rem; font-weight: 600; line-height: 1.2; color: var(--text); }
+.card-rarity { font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .r-secret{color:var(--secret)} .r-ultra{color:var(--ultra)} .r-super{color:var(--super)} .r-rare{color:var(--rare)} .r-common{color:var(--common)}
 .card-btn {
   width: 100%; border-radius: 0; background: rgba(201,168,76,.1);
@@ -394,6 +406,17 @@ button {
 .modal-actions button { flex: 1; }
 .modal-pick-btn { display: none; }
 .modal-pool-btns { display: none; }
+
+/* ── Header nav ── */
+header { position: relative; }
+#headerNav {
+  display: flex; justify-content: center; gap: .5rem;
+  flex-wrap: wrap; margin-top: .75rem;
+}
+#headerNav button {
+  font-size: .78rem; padding: .3rem .85rem; min-height: 32px;
+  letter-spacing: .06em; border-radius: 999px;
+}
 </style>
 </head>
 <body>
@@ -405,8 +428,16 @@ button {
 </div>
 
 <header>
-  <h1>⚡ YGO Draft</h1>
-  <p id="headerSub">Choose your mode</p>
+  <h1>YU-GI-OH!</h1>
+  <div class="header-subtitle-row">
+    <p id="headerSub"></p>
+  </div>
+  <nav id="headerNav">
+    <button class="btn-ghost hidden" id="navBack"   onclick="navBack()">← Back</button>
+    <button class="btn-ghost hidden" id="navOffline" onclick="showScreen('offline')">New Draft</button>
+    <button class="btn-ghost hidden" id="navLobby"  onclick="showScreen('lobby')">Lobby</button>
+    <button class="btn-ghost hidden" id="navMode"   onclick="showScreen('mode')">Main Menu</button>
+  </nav>
 </header>
 
 <div class="app">
@@ -414,14 +445,14 @@ button {
 <!-- ══ MODE SELECT ════════════════════════════════════════════════════════ -->
 <div id="modeScreen">
   <div class="mode-card">
-    <div class="mode-icon">🤖</div>
+    
     <h3>Play Offline vs AI</h3>
     <p>Draft solo or against AI opponents. No internet needed after the page loads. Pick your sets, choose how many AI players, and go.</p>
     <button class="btn-primary" style="width:100%;" onclick="showScreen('offline')">Play Offline</button>
   </div>
   <div class="divider">or play with friends</div>
   <div class="mode-card">
-    <div class="mode-icon">🌐</div>
+    
     <h3>Online Lobby</h3>
     <p>Create a lobby and share the 6-letter code. Anyone with the link can join from anywhere.</p>
     <button class="btn-outline" style="width:100%;" onclick="showScreen('lobby')">Play Online</button>
@@ -921,6 +952,10 @@ function startOnlineDraft(){
   setTimeout(()=>{btn.disabled=false;btn.textContent='Start Draft';},4000);
 }
 function copyCode(){ navigator.clipboard.writeText(S.lobbyCode).then(()=>toast('Code copied!')); }
+function navBack(){
+  const btn = document.getElementById('navBack');
+  showScreen(btn._dest || 'mode');
+}
 
 // ══ Set config ════════════════════════════════════════════════════════════════
 function setOptions(){
@@ -963,7 +998,7 @@ async function fetchImg(name){
     const r=await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(name)}&num=1&offset=0`);
     if(!r.ok) throw 0;
     const d=await r.json();
-    const url=d.data[0].card_images[0].image_url_small||d.data[0].card_images[0].image_url;
+    const url=d.data[0].card_images[0].image_url;
     S.imageCache[name]=url; return url;
   }catch{S.imageCache[name]=null;return null;}
 }
@@ -1130,8 +1165,18 @@ function showScreen(name){
   document.getElementById('draftScreen').classList.toggle('hidden',name!=='draft');
   document.getElementById('mobileNav').classList.toggle('hidden',name!=='draft');
 
-  const subs={mode:'Choose your mode',offline:'Set up your draft',lobby:'Host or join a lobby',waiting:'Waiting for players…',draft:'Draft in progress'};
+  const subs={mode:'',offline:'Set up your draft',lobby:'Host or join a lobby',waiting:'Waiting for players…',draft:''};
   document.getElementById('headerSub').textContent=subs[name]||'';
+
+  // Update nav buttons based on current screen
+  const nb = id => document.getElementById(id);
+  const hide = (...ids) => ids.forEach(id=>nb(id).classList.add('hidden'));
+  const show = (...ids) => ids.forEach(id=>nb(id).classList.remove('hidden'));
+  hide('navBack','navOffline','navLobby','navMode');
+  if(name==='offline'||name==='lobby')   { show('navBack'); nb('navBack')._dest='mode'; }
+  if(name==='waiting')                   { show('navBack','navMode'); nb('navBack')._dest='lobby'; }
+  if(name==='draft')                     { show('navOffline','navLobby','navMode'); }
+  if(name==='mode')                      { /* no nav needed on home */ }
 
   if(name==='offline'&&!document.getElementById('offlineSetRows').children.length) addSetRow('offline');
   if(name==='waiting'&&S.isHost&&!document.getElementById('onlineSetRows').children.length) addSetRow('online');
