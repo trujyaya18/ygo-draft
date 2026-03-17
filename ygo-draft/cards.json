@@ -1,0 +1,150 @@
+{
+  "sets": [
+    {
+      "id": "LOB",
+      "name": "Legend of Blue Eyes White Dragon",
+      "cards": [
+        { "name": "Blue-Eyes White Dragon",    "rarity": "Ultra Rare" },
+        { "name": "Dark Magician",             "rarity": "Ultra Rare" },
+        { "name": "Exodia the Forbidden One",  "rarity": "Ultra Rare" },
+        { "name": "Gaia The Fierce Knight",    "rarity": "Ultra Rare" },
+        { "name": "Raigeki",                   "rarity": "Super Rare" },
+        { "name": "Trap Hole",                 "rarity": "Super Rare" },
+        { "name": "Dark Hole",                 "rarity": "Super Rare" },
+        { "name": "Change of Heart",           "rarity": "Super Rare" },
+        { "name": "Battle Ox",                 "rarity": "Rare" },
+        { "name": "Curse of Dragon",           "rarity": "Rare" },
+        { "name": "Feral Imp",                 "rarity": "Rare" },
+        { "name": "Mystical Elf",              "rarity": "Common" },
+        { "name": "Hitotsu-Me Giant",          "rarity": "Common" },
+        { "name": "Winged Dragon, Guardian of the Fortress #1", "rarity": "Common" },
+        { "name": "Ryu-Kishin",               "rarity": "Common" },
+        { "name": "Dark Energy",               "rarity": "Common" },
+        { "name": "Laser Cannon Armor",        "rarity": "Common" },
+        { "name": "Spike Shield with Chain",   "rarity": "Common" },
+        { "name": "Gravedigger Ghoul",         "rarity": "Common" },
+        { "name": "Ancient Elf",               "rarity": "Common" }
+      ]
+    },
+    {
+      "id": "MRD",
+      "name": "Metal Raiders",
+      "cards": [
+        { "name": "Summoned Skull",            "rarity": "Ultra Rare" },
+        { "name": "Time Wizard",               "rarity": "Ultra Rare" },
+        { "name": "Red-Eyes B. Dragon",        "rarity": "Ultra Rare" },
+        { "name": "Kazejin",                   "rarity": "Super Rare" },
+        { "name": "Suijin",                    "rarity": "Super Rare" },
+        { "name": "Sanga of the Thunder",      "rarity": "Super Rare" },
+        { "name": "Seven Colored Fish",        "rarity": "Rare" },
+        { "name": "Man-Eater Bug",             "rarity": "Rare" },
+        { "name": "Wall of Illusion",          "rarity": "Rare" },
+        { "name": "Baby Dragon",               "rarity": "Common" },
+        { "name": "Petit Dragon",              "rarity": "Common" },
+        { "name": "Pale Beast",                "rarity": "Common" },
+        { "name": "Hane-Hane",                 "rarity": "Common" },
+        { "name": "Dream Clown",               "rarity": "Common" },
+        { "name": "Steel Scorpion",            "rarity": "Common" },
+        { "name": "Ancient Tool",              "rarity": "Common" },
+        { "name": "Tongyo",                    "rarity": "Common" },
+        { "name": "Misairuzame",               "rarity": "Common" }
+      ]
+    },
+    {
+      "id": "MRL",
+      "name": "Magic Ruler",
+      "cards": [
+        { "name": "Relinquished",              "rarity": "Ultra Rare" },
+        { "name": "Toon Summoned Skull",       "rarity": "Ultra Rare" },
+        { "name": "Thousand-Eyes Restrict",    "rarity": "Ultra Rare" },
+        { "name": "Magician of Faith",         "rarity": "Super Rare" },
+        { "name": "Painful Choice",            "rarity": "Super Rare" },
+        { "name": "Megamorph",                 "rarity": "Super Rare" },
+        { "name": "Senju of the Thousand Hands","rarity": "Rare" },
+        { "name": "Delinquent Duo",            "rarity": "Rare" },
+        { "name": "Confiscation",              "rarity": "Rare" },
+        { "name": "Penguin Knight",            "rarity": "Common" },
+        { "name": "Dark Zebra",                "rarity": "Common" },
+        { "name": "Toon Mermaid",              "rarity": "Common" },
+        { "name": "Toon Alligator",            "rarity": "Common" },
+        { "name": "Graveyard and the Hand of Invitation", "rarity": "Common" },
+        { "name": "Cyber Shield",              "rarity": "Common" },
+        { "name": "Elegant Egotist",           "rarity": "Common" },
+        { "name": "Star Boy",                  "rarity": "Common" },
+        { "name": "Witch's Apprentice",        "rarity": "Common" }
+      ]
+    },
+    {
+      "id": "PSV",
+      "name": "Pharaoh's Servant",
+      "cards": [
+        { "name": "Jinzo",                     "rarity": "Secret Rare" },
+        { "name": "Imperial Order",            "rarity": "Secret Rare" },
+        { "name": "Heavy Storm",               "rarity": "Ultra Rare" },
+        { "name": "Mage Power",                "rarity": "Ultra Rare" },
+        { "name": "United We Stand",           "rarity": "Ultra Rare" },
+        { "name": "Skull Invitation",          "rarity": "Super Rare" },
+        { "name": "Robbin' Goblin",            "rarity": "Super Rare" },
+        { "name": "Ceasefire",                 "rarity": "Super Rare" },
+        { "name": "Gearfried the Iron Knight", "rarity": "Rare" },
+        { "name": "Spear Cretin",              "rarity": "Rare" },
+        { "name": "Thunder of Ruler",          "rarity": "Rare" },
+        { "name": "Darkfire Soldier #1",       "rarity": "Common" },
+        { "name": "Darkfire Soldier #2",       "rarity": "Common" },
+        { "name": "Skelengel",                 "rarity": "Common" },
+        { "name": "Graverobber",               "rarity": "Common" },
+        { "name": "Needle Worm",               "rarity": "Common" },
+        { "name": "Flying Kamakiri #1",        "rarity": "Common" },
+        { "name": "Pineapple Blast",           "rarity": "Common" },
+        { "name": "Winged Minion",             "rarity": "Common" }
+      ]
+    },
+    {
+      "id": "IOC",
+      "name": "Invasion of Chaos",
+      "cards": [
+        { "name": "Black Luster Soldier - Envoy of the Beginning", "rarity": "Secret Rare" },
+        { "name": "Chaos Emperor Dragon - Envoy of the End",       "rarity": "Secret Rare" },
+        { "name": "Magical Scientist",         "rarity": "Ultra Rare" },
+        { "name": "Dimension Fusion",          "rarity": "Ultra Rare" },
+        { "name": "Dark Core",                 "rarity": "Super Rare" },
+        { "name": "Chaos Command Magician",    "rarity": "Super Rare" },
+        { "name": "Interdimensional Matter Transporter", "rarity": "Rare" },
+        { "name": "Absorbing Kid from the Sky","rarity": "Rare" },
+        { "name": "Chaos Sorcerer",            "rarity": "Rare" },
+        { "name": "Des Koala",                 "rarity": "Common" },
+        { "name": "Mad Dog of Darkness",       "rarity": "Common" },
+        { "name": "Lekunga",                   "rarity": "Common" },
+        { "name": "Orca Mega-Fortress of Darkness", "rarity": "Common" },
+        { "name": "Freed the Matchless General","rarity": "Common" },
+        { "name": "Ninjitsu Art of Transformation","rarity": "Common" },
+        { "name": "A Feint Plan",              "rarity": "Common" },
+        { "name": "Morale Boost",              "rarity": "Common" },
+        { "name": "Non-Fusion Area",           "rarity": "Common" }
+      ]
+    },
+    {
+      "id": "CRV",
+      "name": "Cybernetic Revolution",
+      "cards": [
+        { "name": "Cyber End Dragon",          "rarity": "Secret Rare" },
+        { "name": "Cyber Twin Dragon",         "rarity": "Ultra Rare" },
+        { "name": "Cyber Dragon",              "rarity": "Ultra Rare" },
+        { "name": "Power Bond",                "rarity": "Super Rare" },
+        { "name": "Limiter Removal",           "rarity": "Super Rare" },
+        { "name": "Cyber Barrier Dragon",      "rarity": "Rare" },
+        { "name": "Cyber Laser Dragon",        "rarity": "Rare" },
+        { "name": "Proto-Cyber Dragon",        "rarity": "Rare" },
+        { "name": "Cybernetic Magician",       "rarity": "Common" },
+        { "name": "Cybernetic Cyclopean",      "rarity": "Common" },
+        { "name": "Machine King Prototype",    "rarity": "Common" },
+        { "name": "Cyber Raider",              "rarity": "Common" },
+        { "name": "Mechanical Hound",          "rarity": "Common" },
+        { "name": "Functional Forearms",       "rarity": "Common" },
+        { "name": "Spear Phaser",              "rarity": "Common" },
+        { "name": "Chthonian Polymer",         "rarity": "Common" },
+        { "name": "Chthonian Alliance",        "rarity": "Common" }
+      ]
+    }
+  ]
+}
