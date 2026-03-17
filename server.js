@@ -77,14 +77,29 @@ function generateBoxPacks(set, packCount) {
 
 // ── Lobby state ──────────────────────────────────────────────────────────────
 //
-// Sealed/cube draft model: each player gets their own even slice of the
-// combined box pool and independently opens + picks from their packs.
-// Simple, works great for 1-N players on the same LAN or over a tunnel.
+// TRUE passing booster draft:
+//   - Players sit in a circle. Seat 0, 1, 2, ...
+//   - Each round: every player picks 1 card from the pack at their seat.
+//   - Then all packs rotate one seat to the left.
+//   - When all packs in the current batch are empty, everyone opens the next pack.
+//   - Draft ends when all packs are exhausted.
 //
-// lobbies: Map<code, Lobby>
+// Server drives the round:
+//   - Sends each player their current pack via { type:"pack" }
+//   - Waits for every player to send { type:"pick" }
+//   - Once all picks are in, rotates packs and sends the next round
 //
-// Lobby  { code, hostId, phase:"waiting"|"drafting"|"done", config, packPool, players }
-// Player { id, name, ws, drafted[], myPacks[], myPackIdx, pendingPack }
+// Lobby {
+//   code, hostId, phase, config
+//   players: Map<id, Player>
+//   seats: Card[][]          — seat[i] is the live pack at player i's seat
+//   packStacks: Card[][][]   — packStacks[i] is player i's remaining unopened packs
+//   packNum: number
+//   totalPacks: number
+//   seatOrder: string[]      — player ids in seat order
+// }
+//
+// Player { id, name, ws, drafted[], pickedThisRound: bool }
 
 const lobbies = new Map();
 
@@ -92,10 +107,9 @@ function makeCode(len = 6) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 }
-function makePlayerId() { return makeCode(8); }
 
 function makePlayer(id, name, ws) {
-  return { id, name, ws, drafted: [], myPacks: [], myPackIdx: 0, pendingPack: null };
+  return { id, name, ws, drafted: [], pickedThisRound: false };
 }
 
 // ── WebSocket helpers ─────────────────────────────────────────────────────────
@@ -105,19 +119,22 @@ function send(ws, msg) {
 }
 
 function lobbySnapshot(lobby) {
+  const players = [...lobby.players.values()].map(p => ({
+    id: p.id,
+    name: p.name,
+    drafted: p.drafted.length,
+    packsLeft: lobby.packStacks
+      ? (lobby.packStacks[lobby.seatOrder?.indexOf(p.id)] || []).length
+      : 0,
+    online: p.ws && p.ws.readyState === WebSocket.OPEN,
+  }));
   return {
     type: "lobby_state",
     code: lobby.code,
     phase: lobby.phase,
     hostId: lobby.hostId,
     config: lobby.config,
-    players: [...lobby.players.values()].map(p => ({
-      id: p.id,
-      name: p.name,
-      drafted: p.drafted.length,
-      packsLeft: Math.max(0, (p.myPacks.length || 0) - p.myPackIdx + (p.pendingPack ? 1 : 0)),
-      online: p.ws && p.ws.readyState === WebSocket.OPEN,
-    })),
+    players,
   };
 }
 
@@ -127,39 +144,109 @@ function broadcast(lobby, msg) {
     if (p.ws && p.ws.readyState === WebSocket.OPEN) p.ws.send(raw);
 }
 
-// ── Pack assignment & delivery ────────────────────────────────────────────────
+// ── Draft engine ──────────────────────────────────────────────────────────────
 
-function assignPacks(lobby) {
-  const players   = [...lobby.players.values()];
-  const pool      = shuffle(lobby.packPool);
-  const perPlayer = Math.floor(pool.length / players.length);
-  players.forEach((p, i) => {
-    p.myPacks   = pool.slice(i * perPlayer, (i + 1) * perPlayer);
-    p.myPackIdx = 0;
-    p.pendingPack = null;
-  });
+function removeCard(pack, card) {
+  const idx = pack.findIndex(c => c.name === card.name && c.rarity === card.rarity);
+  if (idx !== -1) pack.splice(idx, 1);
 }
 
-function deliverNextPack(lobby, player) {
-  if (player.myPackIdx >= player.myPacks.length) {
-    player.pendingPack = null;
-    send(player.ws, { type: "draft_done", drafted: player.drafted });
-    const allDone = [...lobby.players.values()].every(
-      p => !p.pendingPack && p.myPackIdx >= p.myPacks.length
-    );
-    if (allDone) {
-      lobby.phase = "done";
-      broadcast(lobby, lobbySnapshot(lobby));
+function startDraft(lobby) {
+  const playerList = [...lobby.players.values()];
+  const N = playerList.length;
+
+  // Deal packs round-robin into each player's stack
+  lobby.seatOrder  = playerList.map(p => p.id);
+  lobby.packStacks = Array.from({ length: N }, () => []);
+  shuffle(lobby.packPool).forEach((pack, i) => {
+    lobby.packStacks[i % N].push([...pack]);
+  });
+
+  lobby.totalPacks = Math.max(...lobby.packStacks.map(s => s.length));
+  lobby.packNum    = 0;
+  lobby.seats      = Array(N).fill(null).map(() => []);
+
+  openNextPacks(lobby);
+}
+
+function openNextPacks(lobby) {
+  const N = lobby.seatOrder.length;
+  const anyLeft = lobby.packStacks.some(s => s.length > 0);
+
+  if (!anyLeft) {
+    // Draft complete
+    lobby.phase = "done";
+    broadcast(lobby, lobbySnapshot(lobby));
+    for (const p of lobby.players.values()) {
+      send(p.ws, { type: "draft_done", drafted: p.drafted });
     }
     return;
   }
-  player.pendingPack = player.myPacks[player.myPackIdx++];
-  send(player.ws, {
-    type: "pack",
-    pack: player.pendingPack,
-    packNum: player.myPackIdx,
-    totalPacks: player.myPacks.length,
-  });
+
+  lobby.packNum++;
+  for (let i = 0; i < N; i++) {
+    lobby.seats[i] = lobby.packStacks[i].length > 0
+      ? [...lobby.packStacks[i].shift()]
+      : [];
+  }
+
+  sendPacksToPlayers(lobby);
+}
+
+function sendPacksToPlayers(lobby) {
+  // Reset pick flags
+  for (const p of lobby.players.values()) p.pickedThisRound = false;
+
+  const N = lobby.seatOrder.length;
+
+  // Check if any seat has cards — if not, rotate and open next
+  const anyCards = lobby.seats.some(s => s.length > 0);
+  if (!anyCards) {
+    openNextPacks(lobby);
+    return;
+  }
+
+  broadcast(lobby, lobbySnapshot(lobby));
+
+  // Send each player their current pack
+  for (let i = 0; i < N; i++) {
+    const playerId = lobby.seatOrder[i];
+    const player   = lobby.players.get(playerId);
+    const pack     = lobby.seats[i];
+
+    if (!player) continue;
+
+    if (pack.length === 0) {
+      // This player has nothing to pick this round — mark as auto-picked
+      player.pickedThisRound = true;
+      send(player.ws, { type: "waiting_for_others" });
+    } else {
+      send(player.ws, {
+        type: "pack",
+        pack,
+        packNum: lobby.packNum,
+        totalPacks: lobby.totalPacks,
+        cardsLeft: pack.length,
+      });
+    }
+  }
+
+  // If everyone was auto-skipped (all empty), advance
+  checkRoundComplete(lobby);
+}
+
+function checkRoundComplete(lobby) {
+  const allPicked = [...lobby.players.values()].every(p => p.pickedThisRound);
+  if (!allPicked) return;
+
+  // Rotate packs left: seat[i] gets what was at seat[(i-1+N)%N]
+  const N    = lobby.seatOrder.length;
+  const tmp  = lobby.seats.map(s => [...s]);
+  for (let i = 0; i < N; i++) {
+    lobby.seats[i] = tmp[(i - 1 + N + N) % N];
+  }
+
+  sendPacksToPlayers(lobby);
 }
 
 // ── WebSocket connection handler ──────────────────────────────────────────────
@@ -174,13 +261,15 @@ wss.on("connection", ws => {
 
     // ── CREATE ───────────────────────────────────────────────────
     if (msg.type === "create_lobby") {
-      playerId  = makePlayerId();
+      playerId  = makeCode(8);
       const code = makeCode();
       lobbyCode  = code;
       const lobby = {
         code, hostId: playerId, phase: "waiting",
         config: [], packPool: [],
         players: new Map(),
+        seats: [], packStacks: [], seatOrder: [],
+        packNum: 0, totalPacks: 0,
       };
       lobby.players.set(playerId, makePlayer(playerId, (msg.name || "Host").trim().slice(0, 24), ws));
       lobbies.set(code, lobby);
@@ -193,9 +282,9 @@ wss.on("connection", ws => {
     if (msg.type === "join_lobby") {
       const code  = (msg.code || "").toUpperCase().trim();
       const lobby = lobbies.get(code);
-      if (!lobby)                  return send(ws, { type: "error", msg: "Lobby not found." });
+      if (!lobby)                    return send(ws, { type: "error", msg: "Lobby not found." });
       if (lobby.phase !== "waiting") return send(ws, { type: "error", msg: "Draft already started." });
-      playerId  = makePlayerId();
+      playerId  = makeCode(8);
       lobbyCode = code;
       lobby.players.set(playerId, makePlayer(playerId, (msg.name || "Player").trim().slice(0, 24), ws));
       send(ws, { type: "joined", code, playerId, isHost: false });
@@ -203,7 +292,6 @@ wss.on("connection", ws => {
       return;
     }
 
-    // Remaining messages require an active lobby + player
     const lobby  = lobbies.get(lobbyCode);
     const player = lobby?.players.get(playerId);
     if (!lobby || !player) return;
@@ -231,21 +319,31 @@ wss.on("connection", ws => {
       }
 
       lobby.phase = "drafting";
-      assignPacks(lobby);
-      broadcast(lobby, lobbySnapshot(lobby));
-      for (const p of lobby.players.values()) deliverNextPack(lobby, p);
+      startDraft(lobby);
       return;
     }
 
     // ── PICK ─────────────────────────────────────────────────────
     if (msg.type === "pick") {
-      if (lobby.phase !== "drafting" || !player.pendingPack) return;
+      if (lobby.phase !== "drafting") return;
+      if (player.pickedThisRound)     return; // ignore duplicate picks
       const card = msg.card;
       if (!card?.name) return;
+
+      const seatIdx = lobby.seatOrder.indexOf(playerId);
+      const pack    = lobby.seats[seatIdx];
+      if (!pack || pack.length === 0) return;
+
+      // Verify the card is actually in the pack
+      const cardIdx = pack.findIndex(c => c.name === card.name && c.rarity === card.rarity);
+      if (cardIdx === -1) return;
+
       player.drafted.push(card);
-      player.pendingPack = null;
+      pack.splice(cardIdx, 1);
+      player.pickedThisRound = true;
+
       broadcast(lobby, lobbySnapshot(lobby));
-      deliverNextPack(lobby, player);
+      checkRoundComplete(lobby);
       return;
     }
   });
@@ -253,7 +351,14 @@ wss.on("connection", ws => {
   ws.on("close", () => {
     const lobby = lobbies.get(lobbyCode);
     if (!lobby) return;
-    broadcast(lobby, lobbySnapshot(lobby)); // triggers online:false for this player
+    broadcast(lobby, lobbySnapshot(lobby));
+
+    // If it's the host and draft hasn't started, clean up after a delay
+    if (playerId === lobby.hostId && lobby.phase === "waiting") {
+      setTimeout(() => {
+        if (lobbies.get(lobbyCode) === lobby) lobbies.delete(lobbyCode);
+      }, 30000);
+    }
   });
 });
 
