@@ -533,6 +533,14 @@ header { position: relative; }
       <span class="badge" id="totalPacksBadge">0 packs</span>
     </div>
     <div style="padding:.9rem;display:flex;flex-direction:column;gap:.85rem;">
+      <div style="display:flex;align-items:center;gap:.9rem;">
+        <span style="font-family:'Cinzel',serif;font-size:.82rem;color:var(--gold);letter-spacing:.06em;text-transform:uppercase;">AI Players</span>
+        <div class="ai-counter" style="margin-left:auto;">
+          <button onclick="changeOnlineAI(-1)" style="width:2.4rem;height:2.4rem;min-height:2.4rem;font-size:1.2rem;padding:0;border-radius:50%;border:1px solid var(--border);background:var(--bg3);color:var(--text);">−</button>
+          <div class="ai-val" id="onlineAiCount" style="font-size:1.4rem;min-width:2rem;text-align:center;">0</div>
+          <button onclick="changeOnlineAI(1)"  style="width:2.4rem;height:2.4rem;min-height:2.4rem;font-size:1.2rem;padding:0;border-radius:50%;border:1px solid var(--border);background:var(--bg3);color:var(--text);">+</button>
+        </div>
+      </div>
       <div class="set-rows" id="onlineSetRows"></div>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
         <button class="btn-outline" onclick="addSetRow('online')" style="flex:1;">+ Add Set</button>
@@ -920,8 +928,9 @@ function updateWaitingRoom(msg){
   players.forEach(p=>{
     const div=document.createElement('div'); div.className='player-chip';
     div.innerHTML=`
-      <span class="dot ${p.online!==false?'dot-online':'dot-offline'}"></span>
+      <span class="dot ${p.isAI?'dot-ai':p.online!==false?'dot-online':'dot-offline'}"></span>
       <span style="flex:1;font-weight:600;">${esc(p.name)}</span>
+      ${p.isAI?'<span style="font-size:.7rem;color:var(--ultra)">AI</span>':''}
       ${p.id===S.playerId?'<span style="font-size:.7rem;color:var(--dim)">YOU</span>':''}
       ${p.id===msg.hostId?'<span style="font-size:.7rem;color:var(--gold)">HOST</span>':''}
     `;
@@ -994,7 +1003,13 @@ function pushOnlineConfig(){
   const config=rows.map(r=>({set:r.querySelector('select').value,packs:parseInt(r.querySelector('input').value)||1}));
   const total=config.reduce((s,c)=>s+c.packs,0);
   document.getElementById('totalPacksBadge').textContent=`${total} packs`;
-  wsSend({type:'set_config',config});
+  const aiCount=parseInt(document.getElementById('onlineAiCount')?.textContent||'0')||0;
+  wsSend({type:'set_config',config,aiCount});
+}
+function changeOnlineAI(d){
+  const el=document.getElementById('onlineAiCount');
+  el.textContent=Math.max(0,Math.min(7,parseInt(el.textContent)+d));
+  pushOnlineConfig();
 }
 
 // ══ AI count ══════════════════════════════════════════════════════════════════
