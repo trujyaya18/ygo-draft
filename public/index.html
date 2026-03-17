@@ -328,6 +328,72 @@ button {
 #toast.show { opacity: 1; transform: translateY(0); }
 .tab-panel { display: none; padding: .9rem; }
 .tab-panel.active { display: block; }
+
+/* ── Card preview modal ── */
+#cardModal {
+  position: fixed; inset: 0; z-index: 9998;
+  display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+  background: rgba(0,0,0,.82);
+  backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
+}
+#cardModal.open { opacity: 1; pointer-events: all; }
+.modal-inner {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: row;
+  width: 100%; max-width: 700px;
+  max-height: 92dvh;
+  animation: modalPop .2s ease;
+  box-shadow: 0 24px 60px rgba(0,0,0,.7);
+}
+@keyframes modalPop { from{transform:scale(.94);opacity:0} to{transform:scale(1);opacity:1} }
+/* Left: card image */
+.modal-img-wrap {
+  width: 220px; flex-shrink: 0;
+  overflow: hidden; background: var(--bg2); position: relative;
+  align-self: stretch;
+}
+.modal-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.modal-img-wrap .img-placeholder { position:absolute;inset:0;display:grid;place-items:center;color:var(--dim); }
+/* Right: info */
+.modal-right {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-body {
+  padding: 1rem; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; gap: .6rem;
+  flex: 1; min-height: 0;
+}
+/* Narrow screens: stack vertically */
+@media (max-width: 540px) {
+  .modal-inner { flex-direction: column; max-width: 340px; }
+  .modal-img-wrap { width: 100%; height: 200px; }
+  .modal-img-wrap img { object-position: top; }
+}
+.modal-name {
+  font-family: 'Cinzel', serif; font-size: 1.05rem; font-weight: 600;
+  color: var(--text); line-height: 1.3;
+}
+.modal-meta {
+  display: flex; gap: .5rem; flex-wrap: wrap; align-items: center;
+}
+.modal-type { font-size: .78rem; color: var(--dim); letter-spacing: .04em; }
+.modal-desc {
+  font-size: .85rem; line-height: 1.6; color: var(--text);
+  border-top: 1px solid var(--border); padding-top: .6rem;
+  white-space: pre-wrap;
+}
+.modal-actions {
+  display: flex; gap: .6rem; padding: .85rem 1rem;
+  border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.modal-actions button { flex: 1; }
+.modal-pick-btn { display: none; }
+.modal-pool-btns { display: none; }
 </style>
 </head>
 <body>
@@ -452,7 +518,7 @@ button {
     <div id="mobileSection0" style="display:flex;flex-direction:column;gap:1rem;">
       <div class="section">
         <div class="section-header">
-          <h2>Current Pack</h2>
+          <h2 id="packSetLabel">Current Pack</h2>
           <span class="badge" id="packProgress">—</span>
         </div>
         <div class="draft-body">
@@ -504,6 +570,39 @@ button {
       </div>
 
     </div>
+  </div>
+</div>
+
+
+<!-- ══ CARD PREVIEW MODAL ════════════════════════════════════════════════ -->
+<div id="cardModal" onclick="closeModal(event)">
+  <div class="modal-inner" onclick="event.stopPropagation()">
+    <div class="modal-img-wrap" id="modalImgWrap">
+      <div class="img-placeholder"><span class="spinner"></span></div>
+    </div>
+    <div class="modal-right">
+    <div class="modal-body">
+      <div class="modal-name" id="modalName"></div>
+      <div class="modal-meta">
+        <div class="card-rarity" id="modalRarity"></div>
+        <div class="modal-type" id="modalType"></div>
+      </div>
+      <div class="modal-desc" id="modalDesc"></div>
+    </div>
+    <div class="modal-actions">
+      <!-- Draft mode: pick button -->
+      <div class="modal-pick-btn" id="modalPickDiv" style="gap:.6rem;flex:1;">
+        <button class="btn-ghost" style="flex:1;" onclick="closeModal()">Close</button>
+        <button class="btn-primary" style="flex:2;" id="modalPickBtn">Pick This Card</button>
+      </div>
+      <!-- Pool mode: add to deck buttons -->
+      <div class="modal-pool-btns" id="modalPoolDiv" style="gap:.6rem;flex:1;">
+        <button class="btn-ghost" style="flex:1;" onclick="closeModal()">Close</button>
+        <button class="btn-outline" style="flex:1;" id="modalMainBtn">→ Main</button>
+        <button class="btn-ghost" style="flex:1;" id="modalSideBtn">Side</button>
+      </div>
+    </div>
+    </div><!-- .modal-right -->
   </div>
 </div>
 
@@ -641,48 +740,90 @@ function startOfflineDraft(){
   draftOpenNextPacks();
 }
 
-// Open the next fresh pack for every player, starting a new passing round
+// ── Draft engine ─────────────────────────────────────────────────────────────
+//
+// How a booster draft actually works:
+//   Round = everyone picks one card from the pack in front of them, simultaneously.
+//   Then ALL packs rotate one seat left.
+//   Repeat until every pack in the current batch is empty.
+//   Then everyone opens their next pack and a new batch begins.
+//
+// With offline AI we resolve AI picks instantly and just pause for the human.
+// Key invariant: in any given round every player picks exactly ONE card.
+// D.seat[i] = the pack currently sitting in front of player i.
+// Human = seat 0. AI 1 = seat 1, AI 2 = seat 2, etc.
+
+function removeCardFromPack(pack, card){
+  const idx = pack.findIndex(c=>c.name===card.name && c.rarity===card.rarity);
+  if(idx !== -1) pack.splice(idx, 1);
+}
+
+// Open the next fresh pack for every player simultaneously
 function draftOpenNextPacks(){
-  if(D.packStacks[0].length===0){
-    document.getElementById('packContainer').innerHTML=
+  const anyPacks = D.packStacks.some(s => s.length > 0);
+  if(!anyPacks){
+    document.getElementById('packContainer').innerHTML =
       `<div class="empty" style="padding:3rem;">&#127881; Draft complete!<br><br>You drafted ${S.drafted.length} cards.</div>`;
-    document.getElementById('packProgress').textContent='Done';
+    document.getElementById('packSetLabel').textContent = 'Draft Complete';
+    document.getElementById('packProgress').textContent = 'Done';
     renderDraftPlayers();
     return;
   }
   D.packNum++;
-  for(let i=0;i<D.N;i++) D.seat[i]=[...D.packStacks[i].shift()];
-  draftAdvanceToHuman();
+  for(let i = 0; i < D.N; i++){
+    D.seat[i] = D.packStacks[i].length > 0 ? [...D.packStacks[i].shift()] : [];
+  }
+  draftStartRound();
 }
 
-// AI players all pick from their current seat, then show the human theirs
-function draftAdvanceToHuman(){
-  for(let i=1;i<D.N;i++){
-    if(D.seat[i]&&D.seat[i].length>0){
-      const pick=aiPick(S.aiPlayers[i-1],D.seat[i]);
+// Start a pick round: AI picks from their seats, then human picks from theirs.
+// Everyone picks exactly once per round.
+function draftStartRound(){
+  // Check if all seats empty — if so move to next pack
+  const anyCards = D.seat.some(p => p && p.length > 0);
+  if(!anyCards){
+    draftOpenNextPacks();
+    return;
+  }
+
+  // AI players each pick one card from the pack at their current seat
+  for(let i = 1; i < D.N; i++){
+    if(D.seat[i] && D.seat[i].length > 0){
+      const pick = aiPick(S.aiPlayers[i-1], D.seat[i]);
       S.aiPlayers[i-1].drafted.push(pick);
-      D.seat[i]=D.seat[i].filter(c=>c!==pick);
+      removeCardFromPack(D.seat[i], pick);
     }
   }
   renderDraftPlayers();
 
-  const humanPack=D.seat[0];
-  if(!humanPack||humanPack.length===0){
-    draftPassPacks();
+  // Now show human their pack to pick from
+  const humanPack = D.seat[0];
+  if(!humanPack || humanPack.length === 0){
+    // Human's seat is empty this round (can happen with uneven packs), skip to rotate
+    draftRotateAndContinue();
     return;
   }
-  document.getElementById('packProgress').textContent=
-    `Pack ${D.packNum} of ${D.totalPacks} · ${humanPack.length} card${humanPack.length!==1?'s':''} remaining`;
-  renderPack(humanPack);
+
+  const packSetName = (()=>{
+    for(const s of S.availableSets){
+      if(s.cards && humanPack.length > 0 && s.cards.some(c => c.name === humanPack[0].name))
+        return s.name || s.id;
+    }
+    return '';
+  })();
+
+  if(packSetName) document.getElementById('packSetLabel').textContent = packSetName;
+  document.getElementById('packProgress').textContent =
+    `Pack ${D.packNum} of ${D.totalPacks} · ${humanPack.length} card${humanPack.length !== 1 ? 's' : ''} left`;
+  renderPack(humanPack, packSetName);
 }
 
-// After human picks, rotate all packs one seat to the left, then continue
-function draftPassPacks(){
-  const tmp=[...D.seat];
-  for(let i=0;i<D.N;i++) D.seat[i]=tmp[(i-1+D.N)%D.N];
-  const anyLeft=D.seat.some(p=>p&&p.length>0);
-  if(!anyLeft) draftOpenNextPacks();
-  else draftAdvanceToHuman();
+// Called after human picks — rotate packs left, then start next round
+function draftRotateAndContinue(){
+  // Rotate: seat[i] receives the pack that was at seat[(i-1+N)%N]
+  const tmp = D.seat.map(p => [...(p || [])]);
+  for(let i = 0; i < D.N; i++) D.seat[i] = tmp[(i - 1 + D.N) % D.N];
+  draftStartRound();
 }
 // ══ Online ════════════════════════════════════════════════════════════════════
 function connectWS(onOpen){
@@ -831,7 +972,11 @@ async function fetchImg(name){
 function rc(r){return{'Secret Rare':'r-secret','Ultra Rare':'r-ultra','Super Rare':'r-super','Rare':'r-rare','Common':'r-common'}[r]||'r-common';}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-async function renderPack(pack){
+async function renderPack(pack, setName){
+  // Update pack header label
+  const setLabel = document.getElementById('packSetLabel');
+  if(setLabel) setLabel.textContent = setName ? setName : 'Current Pack';
+
   const container=document.getElementById('packContainer');
   container.innerHTML='';
   const grid=document.createElement('div'); grid.className='pack-grid';
@@ -839,11 +984,14 @@ async function renderPack(pack){
   const items=pack.map(card=>{
     const div=document.createElement('div'); div.className='card'; div.dataset.rarity=card.rarity||'';
     div.innerHTML=`
-      <div class="card-img-wrap"><div class="img-placeholder"><span class="spinner"></span></div></div>
+      <div class="card-img-wrap" style="cursor:zoom-in;"><div class="img-placeholder"><span class="spinner"></span></div></div>
       <div class="card-info"><div class="card-name">${esc(card.name)}</div><div class="card-rarity ${rc(card.rarity)}">${esc(card.rarity||'')}</div></div>
       <button class="card-btn">Pick</button>
     `;
     div.querySelector('.card-btn').addEventListener('click',()=>pickCard(card));
+    // Tap image or name to preview
+    div.querySelector('.card-img-wrap').addEventListener('click',()=>openModal(card,'draft'));
+    div.querySelector('.card-name').addEventListener('click',()=>openModal(card,'draft'));
     grid.appendChild(div);
     return{div,card};
   });
@@ -852,8 +1000,8 @@ async function renderPack(pack){
   await Promise.all(items.map(async({div,card})=>{
     const url=await fetchImg(card.name);
     const wrap=div.querySelector('.card-img-wrap');
-    wrap.innerHTML=url?`<img src="${url}" alt="${esc(card.name)}" loading="lazy">`
-      :`<div class="img-placeholder" style="font-size:.6rem;">${esc(card.name)}</div>`;
+    wrap.innerHTML=url?`<img src="${url}" alt="${esc(card.name)}" loading="lazy" style="cursor:zoom-in;">`
+      :`<div class="img-placeholder" style="font-size:.6rem;cursor:zoom-in;">${esc(card.name)}</div>`;
   }));
 }
 
@@ -863,12 +1011,15 @@ function pickCard(card){
   if(S.mode==='online'){
     wsSend({type:'pick',card});
   } else {
-    // Remove picked card from human's seat, then pass packs
-    D.seat[0]=D.seat[0].filter(c=>c!==card);
+    // Remove human's pick from their seat, then rotate and continue
+    removeCardFromPack(D.seat[0], card);
+    renderPool(); updateDeckStats(); renderDraftPlayers();
+    toast(`Picked: ${card.name}`);
+    draftRotateAndContinue();
+    return;
   }
   renderPool(); updateDeckStats(); renderDraftPlayers();
   toast(`Picked: ${card.name}`);
-  if(S.mode==='offline') draftPassPacks();
 }
 
 async function renderPool(){
@@ -883,11 +1034,13 @@ async function renderPool(){
   const items=sorted.map(card=>{
     const div=document.createElement('div'); div.className='pool-item';
     div.innerHTML=`
-      <img src="" alt="${esc(card.name)}" style="opacity:.3;">
-      <div class="pool-item-info"><div class="pool-item-name">${esc(card.name)}</div><div class="card-rarity ${rc(card.rarity)}">${esc(card.rarity||'')}</div></div>
+      <img src="" alt="${esc(card.name)}" style="opacity:.3;cursor:zoom-in;">
+      <div class="pool-item-info" style="cursor:zoom-in;"><div class="pool-item-name">${esc(card.name)}</div><div class="card-rarity ${rc(card.rarity)}">${esc(card.rarity||'')}</div></div>
       <button class="btn-outline" style="font-size:.76rem;min-height:38px;">→ Main</button>
       <button class="btn-ghost"   style="font-size:.76rem;min-height:38px;">Side</button>
     `;
+    div.querySelector('img').addEventListener('click',()=>openModal(card,'pool'));
+    div.querySelector('.pool-item-info').addEventListener('click',()=>openModal(card,'pool'));
     div.querySelectorAll('button')[0].addEventListener('click',()=>addToDeck(card,'main'));
     div.querySelectorAll('button')[1].addEventListener('click',()=>addToDeck(card,'side'));
     list.appendChild(div);
@@ -1169,6 +1322,98 @@ fetch('/api/sets').then(r=>r.json()).then(serverSets=>{
     sel.value=cur;
   });
 }).catch(()=>{}); // silently ignore — embedded data is enough
+
+// ══ Card preview modal ════════════════════════════════════════════════════════
+let _modalCard = null;
+let _modalMode = 'draft'; // 'draft' | 'pool'
+
+async function openModal(card, mode){
+  _modalCard = card;
+  _modalMode = mode;
+
+  const modal = document.getElementById('cardModal');
+
+  // Show correct action buttons for this mode
+  const pickDiv = document.getElementById('modalPickDiv');
+  const poolDiv = document.getElementById('modalPoolDiv');
+  if(mode === 'draft'){
+    pickDiv.style.display = 'flex';
+    poolDiv.style.display = 'none';
+  } else {
+    pickDiv.style.display = 'none';
+    poolDiv.style.display = 'flex';
+  }
+
+  // Set name + rarity immediately
+  document.getElementById('modalName').textContent = card.name;
+  const rarEl = document.getElementById('modalRarity');
+  rarEl.textContent = card.rarity || '';
+  rarEl.className = 'card-rarity ' + rc(card.rarity);
+  document.getElementById('modalType').textContent = '';
+  document.getElementById('modalDesc').textContent = 'Loading card text…';
+
+  // Show spinner in image
+  const imgWrap = document.getElementById('modalImgWrap');
+  imgWrap.innerHTML = '<div class="img-placeholder"><span class="spinner"></span></div>';
+
+  // Wire pick button
+  document.getElementById('modalPickBtn').onclick = () => { closeModal(); pickCard(card); };
+
+  // Wire pool buttons
+  document.getElementById('modalMainBtn').onclick = () => { closeModal(); addToDeck(card,'main'); };
+  document.getElementById('modalSideBtn').onclick  = () => { closeModal(); addToDeck(card,'side'); };
+
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  // Fetch full card data from YGOPRODECK
+  try {
+    const res = await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(card.name)}&num=1&offset=0`);
+    if(!res.ok) throw 0;
+    const data = await res.json();
+    const info = data.data[0];
+
+    // Image (full size for modal)
+    const url = info.card_images[0].image_url || info.card_images[0].image_url_small;
+    imgWrap.innerHTML = url
+      ? `<img src="${url}" alt="${esc(card.name)}" style="width:100%;height:100%;object-fit:cover;display:block;">`
+      : `<div class="img-placeholder">${esc(card.name)}</div>`;
+
+    // Type line
+    let typeLine = info.type || '';
+    if(info.race) typeLine += typeLine ? ` / ${info.race}` : info.race;
+    if(info.attribute) typeLine = `[${info.attribute}] ` + typeLine;
+    if(info.level) typeLine += ` · Level ${info.level}`;
+    document.getElementById('modalType').textContent = typeLine;
+
+    // Card text
+    document.getElementById('modalDesc').textContent = info.desc || '—';
+
+    // ATK/DEF for monsters
+    if(info.atk !== undefined){
+      const atkdef = document.createElement('div');
+      atkdef.style.cssText = 'font-size:.82rem;color:var(--gold);font-weight:600;border-top:1px solid var(--border);padding-top:.5rem;';
+      atkdef.textContent = `ATK ${info.atk ?? '?'} / DEF ${info.def ?? '?'}`;
+      document.getElementById('modalDesc').after(atkdef);
+    }
+  } catch {
+    imgWrap.innerHTML = `<div class="img-placeholder">${esc(card.name)}</div>`;
+    document.getElementById('modalDesc').textContent = 'Card text unavailable offline.';
+  }
+}
+
+function closeModal(e){
+  if(e && e.target !== document.getElementById('cardModal')) return;
+  document.getElementById('cardModal').classList.remove('open');
+  document.body.style.overflow = '';
+  // Clean up any ATK/DEF element added dynamically
+  const atkdef = document.querySelector('#cardModal .modal-body div[style*="ATK"]');
+  if(atkdef) atkdef.remove();
+}
+
+// Close on Escape key
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
 </script>
 </body>
 </html>
