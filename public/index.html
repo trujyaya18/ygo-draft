@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>YGO Draft Simulator</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
 :root {
   --gold:    #c9a84c;
@@ -26,474 +29,436 @@
   --common:  #aaaaaa;
   --danger:  #e05555;
   --ok:      #55b88a;
-  --r:       6px;
+  --r:       8px;
+  --touch:   48px;
+  --safe-b:  env(safe-area-inset-bottom, 0px);
 }
 
-/* ── Splash screen ── */
+html { scroll-behavior: smooth; height: 100%; }
+body {
+  font-family: 'Rajdhani', sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100dvh; overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--gold-dk); border-radius: 3px; }
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(201,168,76,.03) 40px,rgba(201,168,76,.03) 41px),
+    repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(201,168,76,.03) 40px,rgba(201,168,76,.03) 41px);
+}
+
+/* ── Splash ── */
 #splash {
-  position: fixed; inset: 0; z-index: 99999;
-  cursor: pointer;
-  background: #000;
-  display: flex; align-items: center; justify-content: center;
+  position: fixed; inset: 0; z-index: 99999; cursor: pointer;
+  background: #000; display: flex; align-items: center; justify-content: center;
   transition: opacity .6s ease;
 }
 #splash.fade-out { opacity: 0; pointer-events: none; }
-#splash img {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  display: block;
-}
+#splash img { width: 100%; height: 100%; object-fit: cover; display: block; }
 #splash-prompt {
-  position: absolute;
-  bottom: 7%;
-  left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
   font-family: 'Cinzel Decorative', cursive;
-  font-size: clamp(.9rem, 2.5vw, 1.5rem);
-  color: #fff;
-  letter-spacing: .15em;
+  font-size: clamp(1rem, 3vw, 1.5rem); color: #fff; letter-spacing: .15em;
   text-shadow: 0 0 20px rgba(201,168,76,.9), 0 2px 8px rgba(0,0,0,.9);
-  animation: pulse 1.4s ease-in-out infinite;
-  white-space: nowrap;
+  animation: pulse 1.4s ease-in-out infinite; white-space: nowrap;
 }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: .35; }
-}
-
-html { scroll-behavior: smooth; }
-body {
-  font-family: 'Rajdhani', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg2); }
-::-webkit-scrollbar-thumb { background: var(--gold-dk); border-radius: 3px; }
-
-body::before {
-  content: '';
-  position: fixed; inset: 0;
-  background:
-    repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(201,168,76,.03) 40px, rgba(201,168,76,.03) 41px),
-    repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(201,168,76,.03) 40px, rgba(201,168,76,.03) 41px);
-  pointer-events: none; z-index: 0;
-}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+@keyframes fadeIn { from{opacity:0;transform:translateY(-6px)} }
+@keyframes slideUp { from{opacity:0;transform:translateY(16px)} }
 
 /* ── Header ── */
 header {
-  position: relative; text-align: center;
-  padding: 2rem 1rem 1.4rem;
+  text-align: center; position: relative; z-index: 1;
+  padding: max(1.4rem, env(safe-area-inset-top, 1.4rem)) 1rem 1.1rem;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(201,168,76,.08) 0%, transparent 100%);
-  z-index: 1;
+  background: linear-gradient(180deg,rgba(201,168,76,.08) 0%,transparent 100%);
 }
 header h1 {
   font-family: 'Cinzel Decorative', cursive;
-  font-size: clamp(1.3rem, 3.5vw, 2.4rem);
-  color: var(--gold);
+  font-size: clamp(1.2rem, 5vw, 2.4rem); color: var(--gold);
   text-shadow: 0 0 30px rgba(201,168,76,.4);
 }
-header p { color: var(--dim); font-size: .9rem; margin-top: .3rem; letter-spacing: .04em; }
+header p { color: var(--dim); font-size: .85rem; margin-top: .2rem; letter-spacing: .04em; }
 
-/* ── App shell ── */
+/* ── App ── */
 .app {
   position: relative; z-index: 1;
-  max-width: 1400px; margin: 0 auto;
-  padding: 1.5rem;
-  display: flex; flex-direction: column; gap: 1.5rem;
+  max-width: 1400px; margin: 0 auto; padding: 1rem;
+  display: flex; flex-direction: column; gap: 1rem;
+  padding-bottom: calc(1rem + var(--safe-b));
 }
 
-/* ── Panels ── */
-.section {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  overflow: hidden;
-}
+/* ── Sections ── */
+.section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
 .section-header {
-  display: flex; align-items: center; gap: .75rem;
-  padding: .85rem 1.2rem;
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: .6rem;
+  padding: .75rem 1rem; border-bottom: 1px solid var(--border);
   background: rgba(255,255,255,.025);
 }
 .section-header h2 {
-  font-family: 'Cinzel', serif; font-size: .95rem; font-weight: 600;
+  font-family: 'Cinzel', serif; font-size: .9rem; font-weight: 600;
   color: var(--gold); letter-spacing: .08em; text-transform: uppercase;
 }
 .badge {
-  margin-left: auto; font-size: .78rem; font-weight: 600;
+  margin-left: auto; font-size: .75rem; font-weight: 600;
   color: var(--gold); background: rgba(201,168,76,.12);
-  border: 1px solid rgba(201,168,76,.25);
-  border-radius: 999px; padding: .12rem .6rem;
+  border: 1px solid rgba(201,168,76,.25); border-radius: 999px; padding: .1rem .55rem;
 }
 
 /* ── Buttons ── */
 button {
-  font-family: 'Rajdhani', sans-serif; font-weight: 600;
-  font-size: .92rem; cursor: pointer; border-radius: var(--r);
-  border: none; padding: .52rem 1.1rem; letter-spacing: .05em;
-  transition: all .15s;
+  font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 1rem;
+  cursor: pointer; border-radius: var(--r); border: none;
+  padding: .6rem 1.2rem; letter-spacing: .05em;
+  transition: all .12s; min-height: var(--touch); touch-action: manipulation;
 }
-.btn-primary {
-  background: linear-gradient(135deg, var(--gold-dk), var(--gold));
-  color: #0a0a0f; border: 1px solid var(--gold);
-}
-.btn-primary:hover { filter: brightness(1.12); transform: translateY(-1px); }
-.btn-primary:active { transform: none; }
-.btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; filter: none; }
-.btn-outline {
-  background: transparent; color: var(--gold); border: 1px solid var(--gold-dk);
-}
-.btn-outline:hover { border-color: var(--gold); background: rgba(201,168,76,.08); }
-.btn-ghost {
-  background: transparent; color: var(--dim); border: 1px solid var(--border);
-}
-.btn-ghost:hover { border-color: var(--dim); color: var(--text); }
-.btn-danger {
-  background: transparent; color: var(--danger); border: 1px solid rgba(224,85,85,.35);
-}
-.btn-danger:hover { background: rgba(224,85,85,.1); }
-.btn-sm { width: 1.6rem; height: 1.6rem; font-size: .85rem; padding: 0; display: grid; place-items: center; border-radius: 3px; }
+.btn-primary { background: linear-gradient(135deg,var(--gold-dk),var(--gold)); color: #0a0a0f; border: 1px solid var(--gold); }
+.btn-primary:active { filter: brightness(.88); transform: scale(.98); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+.btn-outline { background: transparent; color: var(--gold); border: 1px solid var(--gold-dk); }
+.btn-outline:active { background: rgba(201,168,76,.15); }
+.btn-ghost { background: transparent; color: var(--dim); border: 1px solid var(--border); }
+.btn-ghost:active { background: rgba(255,255,255,.06); }
+.btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(224,85,85,.35); }
+.btn-danger:active { background: rgba(224,85,85,.1); }
+.btn-sm { min-height: 38px; min-width: 38px; font-size: .9rem; padding: 0; display: grid; place-items: center; border-radius: 4px; }
 .btn-icon {
   background: none; border: 1px solid var(--border); border-radius: var(--r);
-  color: var(--dim); cursor: pointer; width: 2rem; height: 2rem;
-  display: grid; place-items: center; font-size: 1rem; transition: all .15s;
+  color: var(--dim); cursor: pointer; min-width: var(--touch); min-height: var(--touch);
+  display: grid; place-items: center; font-size: 1.1rem; touch-action: manipulation;
 }
-.btn-icon:hover { border-color: var(--danger); color: var(--danger); }
+.btn-icon:active { border-color: var(--danger); color: var(--danger); }
 
-/* ── Lobby screen ── */
-#lobbyScreen {
-  max-width: 480px; margin: 2rem auto;
-  display: flex; flex-direction: column; gap: 1rem;
+/* ── Mode screen ── */
+#modeScreen { max-width: 440px; margin: 1.5rem auto; display: flex; flex-direction: column; gap: 1rem; animation: slideUp .3s ease; }
+.mode-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 1.3rem; display: flex; flex-direction: column; gap: .8rem;
+  transition: border-color .15s;
 }
-.lobby-card {
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 1.4rem;
-  display: flex; flex-direction: column; gap: .9rem;
-}
-.lobby-card h3 {
-  font-family: 'Cinzel', serif; font-size: .9rem;
-  color: var(--gold); letter-spacing: .1em; text-transform: uppercase;
-}
-.lobby-card input[type="text"] {
-  background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--r); color: var(--text);
-  font-family: 'Rajdhani', sans-serif; font-size: 1rem;
-  padding: .55rem .8rem; outline: none; width: 100%;
-  transition: border-color .15s; letter-spacing: .05em;
-}
-.lobby-card input:focus { border-color: var(--gold); }
-.divider {
-  display: flex; align-items: center; gap: .75rem;
-  color: var(--dim); font-size: .8rem; letter-spacing: .06em;
-}
-.divider::before, .divider::after {
-  content: ''; flex: 1; height: 1px; background: var(--border);
-}
+.mode-card:active { border-color: var(--gold); }
+.mode-card h3 { font-family: 'Cinzel', serif; font-size: 1rem; color: var(--gold); letter-spacing: .08em; }
+.mode-card p { font-size: .88rem; color: var(--dim); line-height: 1.45; }
+.mode-icon { font-size: 2rem; }
 
-/* ── Lobby waiting room ── */
-#waitingRoom { max-width: 600px; margin: 0 auto; }
-.code-display {
-  display: flex; align-items: center; gap: .75rem;
-  background: var(--bg3); border: 1px solid var(--border);
-  border-radius: var(--r); padding: .75rem 1rem;
+/* ── Offline setup ── */
+#offlineSetup { max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; animation: slideUp .3s ease; }
+.setup-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 1.1rem; display: flex; flex-direction: column; gap: .85rem;
 }
-.code-display .code {
-  font-family: 'Cinzel Decorative', cursive;
-  font-size: 2rem; color: var(--gold);
-  letter-spacing: .2em; flex: 1;
-  text-shadow: 0 0 20px rgba(201,168,76,.3);
+.setup-card h3 { font-family: 'Cinzel', serif; font-size: .88rem; color: var(--gold); letter-spacing: .08em; text-transform: uppercase; }
+.ai-counter { display: flex; align-items: center; gap: .9rem; }
+.ai-counter button {
+  width: 3rem; height: 3rem; min-height: 3rem; font-size: 1.4rem; padding: 0;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--bg3); color: var(--text);
 }
-.player-list {
-  display: flex; flex-direction: column; gap: .4rem;
-}
-.player-chip {
-  display: flex; align-items: center; gap: .6rem;
-  background: var(--bg3); border: 1px solid var(--border);
-  border-radius: var(--r); padding: .5rem .8rem;
-  animation: fadeIn .2s ease;
-}
-.player-chip .dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-}
-.dot-online  { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
-.dot-offline { background: var(--dim); }
-.player-chip .pname { flex: 1; font-weight: 600; }
-.player-chip .ptag {
-  font-size: .72rem; color: var(--dim); letter-spacing: .05em;
-}
+.ai-counter button:active { background: var(--bg2); }
+.ai-val { font-family: 'Cinzel', serif; font-size: 2rem; color: var(--gold); min-width: 2.5rem; text-align: center; }
+.ai-lbl { font-size: .82rem; color: var(--dim); line-height: 1.4; }
 
-/* ── Set config (in waiting room) ── */
+/* ── Set rows ── */
 .set-rows { display: flex; flex-direction: column; gap: .5rem; }
 .set-row {
-  display: flex; align-items: center; gap: .6rem;
-  background: var(--bg3); border: 1px solid var(--border);
-  border-radius: var(--r); padding: .55rem .8rem;
-  animation: fadeIn .2s ease;
+  display: flex; align-items: center; gap: .5rem;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r);
+  padding: .5rem .7rem; animation: fadeIn .2s ease;
 }
-.set-row select,
-.set-row input[type="number"] {
-  background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--r); color: var(--text);
-  font-family: 'Rajdhani', sans-serif; font-size: .92rem;
-  padding: .38rem .65rem; outline: none; transition: border-color .15s;
+.set-row select, .set-row input[type="number"] {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+  color: var(--text); font-family: 'Rajdhani', sans-serif; font-size: 1rem;
+  padding: .5rem .6rem; outline: none; min-height: var(--touch);
+  transition: border-color .15s; -webkit-appearance: none; appearance: none;
 }
 .set-row select:focus, .set-row input:focus { border-color: var(--gold); }
 .set-row select { flex: 1; min-width: 0; }
-.set-row input[type="number"] { width: 5.5rem; text-align: center; }
+.set-row input[type="number"] { width: 5rem; text-align: center; }
 .set-row label { font-size: .78rem; color: var(--dim); white-space: nowrap; }
 
-/* ── Draft layout ── */
-.main-cols {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 1.5rem; align-items: start;
+/* ── Lobby screen ── */
+#lobbyScreen { max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; animation: slideUp .3s ease; }
+.lobby-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r);
+  padding: 1.3rem; display: flex; flex-direction: column; gap: .85rem;
 }
-@media (max-width: 900px) { .main-cols { grid-template-columns: 1fr; } }
+.lobby-card h3 { font-family: 'Cinzel', serif; font-size: .88rem; color: var(--gold); letter-spacing: .1em; text-transform: uppercase; }
+.lobby-card input[type="text"] {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+  color: var(--text); font-family: 'Rajdhani', sans-serif; font-size: 1.1rem;
+  padding: .65rem .8rem; outline: none; width: 100%; min-height: var(--touch);
+  transition: border-color .15s;
+}
+.lobby-card input:focus { border-color: var(--gold); }
+.divider { display: flex; align-items: center; gap: .75rem; color: var(--dim); font-size: .8rem; letter-spacing: .06em; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* ── Waiting room ── */
+#waitingRoom { max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 1rem; }
+.code-display {
+  display: flex; align-items: center; gap: .75rem;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: .75rem 1rem;
+}
+.code-display .code {
+  font-family: 'Cinzel Decorative', cursive; font-size: clamp(1.6rem,7vw,2.4rem);
+  color: var(--gold); letter-spacing: .2em; flex: 1; text-shadow: 0 0 20px rgba(201,168,76,.3);
+}
+.player-chip {
+  display: flex; align-items: center; gap: .6rem;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r);
+  padding: .55rem .8rem; animation: fadeIn .2s ease; min-height: var(--touch);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-online  { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.dot-offline { background: var(--dim); }
+.dot-ai      { background: var(--ultra); box-shadow: 0 0 6px var(--ultra); }
+
+/* ── Draft layout ── */
+.draft-cols { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; align-items: start; }
+@media (max-width: 800px) { .draft-cols { grid-template-columns: 1fr; } }
 
 /* ── Pack grid ── */
-.pack-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: .7rem;
-}
-.draft-body { padding: 1.1rem; }
+.pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(138px, 43vw), 1fr)); gap: .6rem; }
+.draft-body { padding: .9rem; }
 
 /* ── Card ── */
 .card {
-  background: var(--bg3); border: 1px solid var(--border);
-  border-radius: var(--r); overflow: hidden;
-  display: flex; flex-direction: column;
-  transition: transform .15s, border-color .15s, box-shadow .15s;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r);
+  overflow: hidden; display: flex; flex-direction: column; transition: transform .12s;
 }
-.card:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,.5); }
-.card-img-wrap {
-  aspect-ratio: 421/614; overflow: hidden;
-  background: var(--bg2); position: relative;
-}
+.card:active { transform: scale(.97); }
+.card-img-wrap { aspect-ratio: 421/614; overflow: hidden; background: var(--bg2); position: relative; }
 .card-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.img-placeholder {
-  position: absolute; inset: 0;
-  display: grid; place-items: center;
-  font-size: .72rem; color: var(--dim); text-align: center; padding: .5rem;
-}
-.card-info { padding: .4rem .45rem; flex: 1; display: flex; flex-direction: column; gap: .25rem; }
-.card-name { font-size: .76rem; font-weight: 600; line-height: 1.2; color: var(--text); }
-.card-rarity { font-size: .68rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-.r-secret { color: var(--secret); }
-.r-ultra  { color: var(--ultra); }
-.r-super  { color: var(--super); }
-.r-rare   { color: var(--rare); }
-.r-common { color: var(--common); }
+.img-placeholder { position: absolute; inset: 0; display: grid; place-items: center; font-size: .7rem; color: var(--dim); text-align: center; padding: .4rem; }
+.card-info { padding: .4rem .45rem; flex: 1; display: flex; flex-direction: column; gap: .2rem; }
+.card-name { font-size: .78rem; font-weight: 600; line-height: 1.2; color: var(--text); }
+.card-rarity { font-size: .66rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.r-secret{color:var(--secret)} .r-ultra{color:var(--ultra)} .r-super{color:var(--super)} .r-rare{color:var(--rare)} .r-common{color:var(--common)}
 .card-btn {
-  width: 100%; border-radius: 0 0 var(--r) var(--r);
-  background: rgba(201,168,76,.1); border: none;
-  border-top: 1px solid var(--border);
-  color: var(--gold); padding: .4rem; font-size: .78rem; letter-spacing: .05em;
+  width: 100%; border-radius: 0; background: rgba(201,168,76,.1);
+  border: none; border-top: 1px solid var(--border); color: var(--gold);
+  padding: .55rem; font-size: .88rem; letter-spacing: .05em; min-height: 44px;
 }
-.card-btn:hover { background: rgba(201,168,76,.2); }
+.card-btn:active { background: rgba(201,168,76,.25); }
+.card-btn:disabled { opacity: .3; }
 .card[data-rarity="Secret Rare"] { border-color: rgba(180,79,255,.5); box-shadow: 0 0 10px rgba(180,79,255,.15); }
 .card[data-rarity="Ultra Rare"]  { border-color: rgba(255,215,0,.4);  box-shadow: 0 0 8px rgba(255,215,0,.1); }
 .card[data-rarity="Super Rare"]  { border-color: rgba(192,192,255,.3); }
 
-/* ── Pool list ── */
-.pool-list {
-  display: flex; flex-direction: column; gap: .35rem;
-  max-height: 500px; overflow-y: auto; padding: 1rem;
-}
+/* ── Pool ── */
+.pool-list { display: flex; flex-direction: column; gap: .3rem; max-height: 420px; overflow-y: auto; padding: .9rem; -webkit-overflow-scrolling: touch; }
 .pool-item {
-  display: flex; align-items: center; gap: .55rem;
-  padding: .4rem .55rem; background: var(--bg3);
-  border: 1px solid var(--border); border-radius: var(--r);
-  transition: border-color .15s;
+  display: flex; align-items: center; gap: .5rem;
+  padding: .45rem .55rem; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r);
+  min-height: var(--touch);
 }
-.pool-item:hover { border-color: var(--gold-dk); }
 .pool-item img { width: 32px; height: auto; border-radius: 3px; flex-shrink: 0; }
 .pool-item-info { flex: 1; min-width: 0; }
 .pool-item-name { font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pool-item button { padding: .22rem .55rem; font-size: .72rem; flex-shrink: 0; }
+.pool-item button { padding: .3rem .6rem; font-size: .76rem; flex-shrink: 0; min-height: 38px; }
 
 /* ── Tabs ── */
 .tabs { display: flex; border-bottom: 1px solid var(--border); }
 .tab-btn {
-  flex: 1; background: transparent; border: none;
-  border-bottom: 2px solid transparent; border-radius: 0;
-  padding: .7rem; color: var(--dim); font-size: .88rem;
-  letter-spacing: .05em; transition: all .15s;
+  flex: 1; background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+  padding: .8rem; color: var(--dim); font-size: .9rem; letter-spacing: .05em;
+  min-height: var(--touch); transition: all .15s;
 }
 .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); background: rgba(201,168,76,.05); }
-.tab-btn:hover:not(.active) { color: var(--text); background: rgba(255,255,255,.03); }
-.tab-panel { display: none; padding: .9rem; }
-.tab-panel.active { display: block; }
 
 /* ── Deck list ── */
-.deck-list {
-  display: flex; flex-direction: column; gap: .28rem;
-  max-height: 210px; overflow-y: auto; margin-bottom: .7rem;
-}
-.deck-item {
-  display: flex; align-items: center; gap: .45rem;
-  padding: .32rem .48rem; background: var(--bg3);
-  border: 1px solid var(--border); border-radius: var(--r);
-}
-.deck-item-qty {
-  font-family: 'Cinzel', serif; font-size: .72rem; color: var(--gold);
-  width: 1.4rem; text-align: center; flex-shrink: 0;
-}
-.deck-item-name { flex: 1; font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.deck-list { display: flex; flex-direction: column; gap: .25rem; max-height: 220px; overflow-y: auto; margin-bottom: .65rem; -webkit-overflow-scrolling: touch; }
+.deck-item { display: flex; align-items: center; gap: .4rem; padding: .35rem .5rem; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); min-height: 42px; }
+.deck-item-qty { font-family: 'Cinzel', serif; font-size: .72rem; color: var(--gold); width: 1.4rem; text-align: center; flex-shrink: 0; }
+.deck-item-name { flex: 1; font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .deck-item-actions { display: flex; gap: .2rem; flex-shrink: 0; }
-.deck-stats {
-  display: flex; gap: .45rem; flex-wrap: wrap;
-  padding: .65rem; background: var(--bg3);
-  border: 1px solid var(--border); border-radius: var(--r); margin-bottom: .65rem;
-}
-.deck-stat-pill {
-  font-size: .76rem; padding: .18rem .55rem; border-radius: 999px;
-  background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--dim);
-}
+.deck-stats { display: flex; gap: .4rem; flex-wrap: wrap; padding: .6rem; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: .6rem; }
+.deck-stat-pill { font-size: .75rem; padding: .18rem .55rem; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--dim); }
 .deck-stat-pill span { color: var(--gold); font-weight: 700; }
 
-/* ── Players sidebar (during draft) ── */
-.players-sidebar {
-  display: flex; flex-direction: column; gap: .3rem;
-  padding: .9rem;
-}
-.draft-player-row {
-  display: flex; align-items: center; gap: .55rem;
-  padding: .38rem .6rem; background: var(--bg3);
-  border: 1px solid var(--border); border-radius: var(--r);
-}
-.draft-player-row .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+/* ── Players sidebar ── */
+.players-sidebar { display: flex; flex-direction: column; gap: .28rem; padding: .85rem; }
+.draft-player-row { display: flex; align-items: center; gap: .5rem; padding: .4rem .6rem; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); min-height: 42px; }
 .draft-player-row .dpname { flex: 1; font-size: .82rem; font-weight: 600; }
 .draft-player-row .dptag { font-size: .7rem; color: var(--dim); }
 
+/* ── Mobile bottom nav ── */
+.mobile-tabs {
+  display: none; position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--panel); border-top: 1px solid var(--border);
+  padding: .35rem .5rem calc(.35rem + var(--safe-b));
+  z-index: 50; justify-content: space-around;
+}
+.mobile-tab-btn {
+  display: flex; flex-direction: column; align-items: center; gap: .12rem;
+  background: none; border: none; color: var(--dim); font-size: .68rem;
+  padding: .3rem .8rem; min-height: auto; letter-spacing: .04em;
+  border-radius: var(--r); transition: color .15s;
+}
+.mobile-tab-btn .mti { font-size: 1.3rem; line-height: 1; }
+.mobile-tab-btn.active { color: var(--gold); }
+
+@media (max-width: 800px) {
+  .mobile-tabs { display: flex; }
+  .app { padding-bottom: calc(68px + var(--safe-b)); }
+  .pool-list { max-height: 52vh; }
+  .deck-list { max-height: 32vh; }
+  /* Hide non-active mobile sections */
+  #mobileSection0:not(.ms-active),
+  #mobileSection1:not(.ms-active),
+  #mobileSection2:not(.ms-active) { display: none !important; }
+  #toast { bottom: calc(70px + var(--safe-b)); right: .75rem; left: .75rem; max-width: none; text-align: center; }
+}
+
 /* ── Misc ── */
 .empty { text-align: center; padding: 2rem 1rem; color: var(--dim); font-size: .88rem; }
-.spinner {
-  display: inline-block; width: 16px; height: 16px;
-  border: 2px solid rgba(201,168,76,.3); border-top-color: var(--gold);
-  border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(201,168,76,.3); border-top-color: var(--gold); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; }
+@keyframes spin { to{transform:rotate(360deg)} }
 .hidden { display: none !important; }
-
 #toast {
-  position: fixed; bottom: 1.4rem; right: 1.4rem;
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--r); padding: .65rem 1rem;
-  font-size: .88rem; font-weight: 600; letter-spacing: .04em;
-  z-index: 9999; opacity: 0; transform: translateY(6px);
-  transition: all .2s; pointer-events: none; max-width: 280px;
+  position: fixed; bottom: calc(1rem + var(--safe-b)); right: 1rem;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r);
+  padding: .65rem 1rem; font-size: .9rem; font-weight: 600; letter-spacing: .04em;
+  z-index: 9999; opacity: 0; transform: translateY(6px); transition: all .2s;
+  pointer-events: none; max-width: min(280px, calc(100vw - 2rem));
 }
 #toast.show { opacity: 1; transform: translateY(0); }
+.tab-panel { display: none; padding: .9rem; }
+.tab-panel.active { display: block; }
 </style>
 </head>
 <body>
 
 <!-- ══ SPLASH ══════════════════════════════════════════════════════════════ -->
-<div id="splash" onclick="dismissSplash()">
+<div id="splash" onclick="dismissSplash()" ontouchend="dismissSplash()">
   <img src="titlescreen.png" alt="YU-GI-OH Draft">
-  <div id="splash-prompt">— CLICK ANYWHERE TO CONTINUE —</div>
+  <div id="splash-prompt">— TAP ANYWHERE TO CONTINUE —</div>
 </div>
 
 <header>
-  <h1>⚡ YGO Draft Simulator</h1>
-  <p id="headerSub">Host or join a draft lobby</p>
+  <h1>⚡ YGO Draft</h1>
+  <p id="headerSub">Choose your mode</p>
 </header>
 
 <div class="app">
 
-<!-- ══ SCREEN 1: Lobby entry ══════════════════════════════════════════════ -->
-<div id="lobbyScreen">
-  <div class="lobby-card">
-    <h3>Your Name</h3>
-    <input type="text" id="playerName" placeholder="Enter your name…" maxlength="24" value="">
+<!-- ══ MODE SELECT ════════════════════════════════════════════════════════ -->
+<div id="modeScreen">
+  <div class="mode-card">
+    <div class="mode-icon">🤖</div>
+    <h3>Play Offline vs AI</h3>
+    <p>Draft solo or against AI opponents. No internet needed after the page loads. Pick your sets, choose how many AI players, and go.</p>
+    <button class="btn-primary" style="width:100%;" onclick="showScreen('offline')">Play Offline</button>
   </div>
-
-  <div class="lobby-card">
-    <h3>Create a Lobby</h3>
-    <button class="btn-primary" onclick="createLobby()">Create New Lobby</button>
-  </div>
-
-  <div class="divider">or join existing</div>
-
-  <div class="lobby-card">
-    <h3>Join by Code</h3>
-    <input type="text" id="joinCode" placeholder="Enter 6-letter code…" maxlength="8"
-           style="text-transform:uppercase;letter-spacing:.15em;font-size:1.2rem;"
-           oninput="this.value=this.value.toUpperCase()">
-    <button class="btn-outline" onclick="joinLobby()">Join Lobby</button>
+  <div class="divider">or play with friends</div>
+  <div class="mode-card">
+    <div class="mode-icon">🌐</div>
+    <h3>Online Lobby</h3>
+    <p>Create a lobby and share the 6-letter code. Anyone with the link can join from anywhere.</p>
+    <button class="btn-outline" style="width:100%;" onclick="showScreen('lobby')">Play Online</button>
   </div>
 </div>
 
-<!-- ══ SCREEN 2: Waiting room (host configures, all see player list) ═════ -->
-<div id="waitingRoom" class="hidden">
+<!-- ══ OFFLINE SETUP ══════════════════════════════════════════════════════ -->
+<div id="offlineSetup" class="hidden">
+  <div class="setup-card">
+    <h3>AI Opponents</h3>
+    <div class="ai-counter">
+      <button onclick="changeAI(-1)">−</button>
+      <div class="ai-val" id="aiCount">1</div>
+      <div class="ai-lbl">AI players<br><span style="font-size:.7rem;color:var(--dim)">(0 = solo)</span></div>
+      <button onclick="changeAI(1)">+</button>
+    </div>
+  </div>
+  <div class="setup-card">
+    <h3>Sets &amp; Packs</h3>
+    <div class="set-rows" id="offlineSetRows"></div>
+    <div style="margin-top:.3rem;">
+      <button class="btn-outline" style="width:100%;" onclick="addSetRow('offline')">+ Add Set</button>
+    </div>
+  </div>
+  <div style="display:flex;gap:.7rem;">
+    <button class="btn-ghost" onclick="showScreen('mode')" style="flex:1;">← Back</button>
+    <button class="btn-primary" onclick="startOfflineDraft()" style="flex:2;">Start Draft</button>
+  </div>
+</div>
 
-  <div class="section" style="margin-bottom:1.2rem;">
+<!-- ══ LOBBY ENTRY ════════════════════════════════════════════════════════ -->
+<div id="lobbyScreen" class="hidden">
+  <div class="lobby-card">
+    <h3>Your Name</h3>
+    <input type="text" id="playerName" placeholder="Enter your name…" maxlength="24">
+  </div>
+  <div class="lobby-card">
+    <h3>Create a Lobby</h3>
+    <button class="btn-primary" onclick="createLobby()" style="width:100%;">Create New Lobby</button>
+  </div>
+  <div class="divider">or join existing</div>
+  <div class="lobby-card">
+    <h3>Join by Code</h3>
+    <input type="text" id="joinCode" placeholder="6-LETTER CODE" maxlength="8"
+           style="text-transform:uppercase;letter-spacing:.2em;font-size:1.3rem;text-align:center;"
+           oninput="this.value=this.value.toUpperCase()">
+    <button class="btn-outline" onclick="joinLobby()" style="width:100%;">Join Lobby</button>
+  </div>
+  <button class="btn-ghost" onclick="showScreen('mode')" style="width:100%;">← Back</button>
+</div>
+
+<!-- ══ WAITING ROOM ═══════════════════════════════════════════════════════ -->
+<div id="waitingRoom" class="hidden">
+  <div class="section">
     <div class="section-header">
       <h2>Lobby Code</h2>
       <span class="badge" id="playerCountBadge">1 player</span>
     </div>
-    <div style="padding:1rem;display:flex;flex-direction:column;gap:.9rem;">
+    <div style="padding:.9rem;display:flex;flex-direction:column;gap:.8rem;">
       <div class="code-display">
         <div class="code" id="lobbyCodeDisplay">——</div>
-        <button class="btn-ghost" style="font-size:.8rem;padding:.4rem .75rem;" onclick="copyCode()">Copy</button>
+        <button class="btn-ghost" style="font-size:.85rem;padding:.5rem .9rem;" onclick="copyCode()">Copy</button>
       </div>
       <p style="color:var(--dim);font-size:.82rem;">Share this code so others can join before the draft starts.</p>
     </div>
   </div>
-
-  <div class="section" style="margin-bottom:1.2rem;">
+  <div class="section">
     <div class="section-header"><h2>Players</h2></div>
     <div class="players-sidebar" id="waitingPlayerList"></div>
   </div>
-
-  <!-- Host-only config -->
   <div class="section" id="hostConfig">
     <div class="section-header">
       <h2>Draft Setup</h2>
       <span class="badge" id="totalPacksBadge">0 packs</span>
     </div>
-    <div style="padding:1rem;display:flex;flex-direction:column;gap:.9rem;">
-      <div class="set-rows" id="setRows"></div>
-      <div style="display:flex;gap:.7rem;flex-wrap:wrap;">
-        <button class="btn-outline" onclick="addSetRow()">+ Add Set</button>
-        <button class="btn-primary" id="startBtn" onclick="startDraft()">Start Draft</button>
+    <div style="padding:.9rem;display:flex;flex-direction:column;gap:.85rem;">
+      <div class="set-rows" id="onlineSetRows"></div>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+        <button class="btn-outline" onclick="addSetRow('online')" style="flex:1;">+ Add Set</button>
+        <button class="btn-primary" id="startBtn" onclick="startOnlineDraft()" style="flex:2;">Start Draft</button>
       </div>
     </div>
   </div>
-
-  <!-- Non-host waiting message -->
   <div class="section hidden" id="guestWaiting">
-    <div style="padding:2rem;text-align:center;color:var(--dim);">
-      ⏳ Waiting for the host to configure and start the draft…
-    </div>
+    <div style="padding:2rem;text-align:center;color:var(--dim);">⏳ Waiting for the host to start the draft…</div>
   </div>
-
 </div>
 
-<!-- ══ SCREEN 3: Active draft ════════════════════════════════════════════ -->
+<!-- ══ DRAFT SCREEN ════════════════════════════════════════════════════════ -->
 <div id="draftScreen" class="hidden">
-  <div class="main-cols">
+  <div class="draft-cols">
 
-    <!-- Left column -->
-    <div style="display:flex;flex-direction:column;gap:1.4rem;">
-
-      <!-- Pack viewer -->
+    <!-- Section 0: Pack + Pool -->
+    <div id="mobileSection0" style="display:flex;flex-direction:column;gap:1rem;">
       <div class="section">
         <div class="section-header">
           <h2>Current Pack</h2>
           <span class="badge" id="packProgress">—</span>
         </div>
         <div class="draft-body">
-          <div id="packContainer"><div class="empty">Loading your first pack…</div></div>
+          <div id="packContainer"><div class="empty">Opening your first pack…</div></div>
         </div>
       </div>
-
-      <!-- Card pool -->
       <div class="section">
         <div class="section-header">
           <h2>Card Pool</h2>
@@ -501,20 +466,19 @@ button {
         </div>
         <div id="poolContainer"><div class="empty">Drafted cards will appear here.</div></div>
       </div>
-
     </div>
 
     <!-- Right column -->
-    <div style="display:flex;flex-direction:column;gap:1.2rem;">
+    <div style="display:flex;flex-direction:column;gap:1rem;">
 
-      <!-- Players progress -->
-      <div class="section">
+      <!-- Section 1: Players -->
+      <div class="section" id="mobileSection1">
         <div class="section-header"><h2>Players</h2></div>
         <div class="players-sidebar" id="draftPlayerList"></div>
       </div>
 
-      <!-- Deck builder -->
-      <div class="section" style="position:sticky;top:1rem;">
+      <!-- Section 2: Deck builder -->
+      <div class="section" id="mobileSection2" style="position:sticky;top:1rem;">
         <div class="tabs">
           <button class="tab-btn active" onclick="switchTab('main')">Main Deck</button>
           <button class="tab-btn" onclick="switchTab('side')">Side Deck</button>
@@ -527,14 +491,14 @@ button {
           </div>
           <div id="mainDeckList" class="deck-list"></div>
           <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-            <button class="btn-ghost" style="font-size:.78rem;padding:.38rem .75rem;" onclick="exportDeck()">Export List</button>
-            <button class="btn-danger" style="font-size:.78rem;padding:.38rem .75rem;" onclick="clearDeck('main')">Clear</button>
+            <button class="btn-ghost" style="font-size:.8rem;padding:.4rem .75rem;min-height:40px;" onclick="exportDeck()">Export</button>
+            <button class="btn-danger" style="font-size:.8rem;padding:.4rem .75rem;min-height:40px;" onclick="clearDeck('main')">Clear</button>
           </div>
         </div>
         <div class="tab-panel" id="tab-side">
           <div id="sideDeckList" class="deck-list"></div>
-          <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-            <button class="btn-danger" style="font-size:.78rem;padding:.38rem .75rem;" onclick="clearDeck('side')">Clear</button>
+          <div style="display:flex;gap:.5rem;">
+            <button class="btn-danger" style="font-size:.8rem;padding:.4rem .75rem;min-height:40px;" onclick="clearDeck('side')">Clear</button>
           </div>
         </div>
       </div>
@@ -544,428 +508,477 @@ button {
 </div>
 
 </div><!-- .app -->
+
+<!-- Mobile bottom nav -->
+<nav class="mobile-tabs hidden" id="mobileNav">
+  <button class="mobile-tab-btn active" id="mnav0" onclick="setMobileSection(0)">
+    <span class="mti">🃏</span>PACK
+  </button>
+  <button class="mobile-tab-btn" id="mnav1" onclick="setMobileSection(1)">
+    <span class="mti">👥</span>PLAYERS
+  </button>
+  <button class="mobile-tab-btn" id="mnav2" onclick="setMobileSection(2)">
+    <span class="mti">📋</span>DECK
+  </button>
+</nav>
+
 <div id="toast"></div>
 
 <script>
 // ══ State ════════════════════════════════════════════════════════════════════
 const S = {
+  mode: null,
   ws: null,
-  playerId: null,
-  lobbyCode: null,
-  isHost: false,
-  phase: "waiting",
+  playerId: null, lobbyCode: null, isHost: false,
   availableSets: [],
-  players: [],
+  aiPlayers: [],
   drafted: [],
-  mainDeck: [],
-  sideDeck: [],
+  mainDeck: [], sideDeck: [],
   imageCache: {},
-  currentPack: null,
   totalPacks: 0,
-  packNum: 0,
+  offlineQueue: [],
+  offlineIdx: 0,
+  curMobileSection: 0,
 };
 
-// ══ WebSocket connection ══════════════════════════════════════════════════════
-function connectWS(onOpen) {
-  const proto = location.protocol === "https:" ? "wss" : "ws";
-  S.ws = new WebSocket(`${proto}://${location.host}`);
-  S.ws.onopen = onOpen;
-  S.ws.onmessage = e => handleMessage(JSON.parse(e.data));
-  S.ws.onclose = () => {
-    toast("Disconnected from server. Refresh to reconnect.", "error");
-  };
+// ══ Offline box generation ════════════════════════════════════════════════════
+const PACK_COMMONS=7, BOX_SIZE=24;
+const RARITY_VAL={'Secret Rare':10,'Ultra Rare':8,'Super Rare':6,'Rare':4,'Common':1};
+
+function shuffle(arr) {
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+function rnd(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function byR(cards,r){return cards.filter(c=>c.rarity===r);}
+function fb(a,b){return a.length?a:b;}
+
+function genBoxPacks(set,packCount){
+  const base=set.cards;
+  const commons=byR(base,'Common'),rares=byR(base,'Rare'),
+        supers=byR(base,'Super Rare'),ultras=byR(base,'Ultra Rare'),secrets=byR(base,'Secret Rare');
+  const all=[]; let rem=packCount;
+  while(rem>0){
+    const bp=Math.min(rem,BOX_SIZE);rem-=bp;const ratio=bp/BOX_SIZE;
+    const sc=Math.random()<ratio*.33?1:0, uc=Math.round(ratio), spc=Math.max(0,Math.round(ratio*3));
+    const foils=[
+      ...Array.from({length:sc},()=>rnd(fb(secrets,fb(ultras,fb(rares,base))))),
+      ...Array.from({length:uc},()=>rnd(fb(ultras,fb(supers,fb(rares,base))))),
+      ...Array.from({length:spc},()=>rnd(fb(supers,fb(ultras,fb(rares,base))))),
+    ];
+    while(foils.length<bp) foils.push(rares.length?rnd(rares):rnd(base));
+    const sf=shuffle(foils).slice(0,bp);
+    for(let p=0;p<bp;p++){
+      const pack=[];
+      for(let i=0;i<PACK_COMMONS;i++) pack.push(commons.length?rnd(commons):rnd(base));
+      if(rares.length) pack.push(rnd(rares));
+      pack.push(sf[p]);
+      all.push(pack);
+    }
+  }
+  return all;
 }
 
-function wsSend(msg) {
-  if (S.ws && S.ws.readyState === WebSocket.OPEN) S.ws.send(JSON.stringify(msg));
+// ══ AI logic ══════════════════════════════════════════════════════════════════
+function aiPick(ai, pack) {
+  let best=null, bestScore=-1;
+  for(const card of pack){
+    const copies=ai.drafted.filter(c=>c.name===card.name).length;
+    if(copies>=3) continue;
+    const score=(RARITY_VAL[card.rarity]||1)+Math.random()*1.5;
+    if(score>bestScore){bestScore=score;best=card;}
+  }
+  return best||pack[0];
 }
 
-// ══ Entry actions ═════════════════════════════════════════════════════════════
-function createLobby() {
-  const name = document.getElementById("playerName").value.trim() || "Host";
-  connectWS(() => wsSend({ type: "create_lobby", name }));
+// ══ Offline draft ══════════════════════════════════════════════════════════════
+function startOfflineDraft(){
+  const rows=[...document.querySelectorAll('#offlineSetRows .set-row')];
+  if(!rows.length) return toast('Add at least one set.','warn');
+  if(!S.availableSets.length) return toast('Sets not loaded yet — check your connection.','warn');
+
+  const setMap=new Map(S.availableSets.map(s=>[s.id,s]));
+  let pool=[];
+  for(const row of rows){
+    const setId=row.querySelector('select').value;
+    const packs=parseInt(row.querySelector('input').value)||1;
+    const set=setMap.get(setId);
+    if(!set) return toast(`Unknown set: ${setId}`,'error');
+    pool.push(...genBoxPacks(set,packs));
+  }
+  pool=shuffle(pool);
+
+  const aiCount=parseInt(document.getElementById('aiCount').textContent)||0;
+  const total=1+aiCount;
+  const per=Math.floor(pool.length/total);
+
+  S.offlineQueue=pool.slice(0,per);
+  S.offlineIdx=0;
+  S.totalPacks=per;
+  S.drafted=[]; S.mainDeck=[]; S.sideDeck=[];
+  S.mode='offline';
+
+  // AI drafts instantly
+  S.aiPlayers=Array.from({length:aiCount},(_,i)=>{
+    const ai={name:`AI ${i+1}`,drafted:[]};
+    const myPacks=pool.slice((i+1)*per,(i+2)*per);
+    for(const pack of myPacks) ai.drafted.push(aiPick(ai,pack));
+    return ai;
+  });
+
+  showScreen('draft');
+  renderDraftPlayers();
+  renderDeck('main'); renderDeck('side'); updateDeckStats();
+  offlineNextPack();
 }
 
-function joinLobby() {
-  const name = document.getElementById("playerName").value.trim() || "Player";
-  const code = document.getElementById("joinCode").value.trim().toUpperCase();
-  if (code.length < 4) return toast("Enter a valid lobby code.", "warn");
-  connectWS(() => wsSend({ type: "join_lobby", name, code }));
+function offlineNextPack(){
+  if(S.offlineIdx>=S.offlineQueue.length){
+    document.getElementById('packContainer').innerHTML=
+      `<div class="empty" style="padding:3rem;">🎉 Draft complete!<br><br>${S.drafted.length} cards in your pool.</div>`;
+    document.getElementById('packProgress').textContent='Done';
+    return;
+  }
+  const pack=S.offlineQueue[S.offlineIdx++];
+  document.getElementById('packProgress').textContent=`Pack ${S.offlineIdx} of ${S.totalPacks}`;
+  renderPack(pack);
 }
 
-// ══ Message handler ═══════════════════════════════════════════════════════════
-function handleMessage(msg) {
-  switch (msg.type) {
+// ══ Online ════════════════════════════════════════════════════════════════════
+function connectWS(onOpen){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  S.ws=new WebSocket(`${proto}://${location.host}`);
+  S.ws.onopen=onOpen;
+  S.ws.onmessage=e=>handleWS(JSON.parse(e.data));
+  S.ws.onclose=()=>toast('Disconnected. Refresh to reconnect.','error');
+}
+function wsSend(msg){ if(S.ws&&S.ws.readyState===1) S.ws.send(JSON.stringify(msg)); }
 
-    case "created":
-    case "joined":
-      S.playerId  = msg.playerId;
-      S.lobbyCode = msg.code;
-      S.isHost    = msg.isHost;
-      showScreen("waiting");
-      document.getElementById("lobbyCodeDisplay").textContent = msg.code;
-      document.getElementById("hostConfig").classList.toggle("hidden", !S.isHost);
-      document.getElementById("guestWaiting").classList.toggle("hidden", S.isHost);
-      break;
+function createLobby(){
+  const name=document.getElementById('playerName').value.trim()||'Host';
+  connectWS(()=>wsSend({type:'create_lobby',name}));
+}
+function joinLobby(){
+  const name=document.getElementById('playerName').value.trim()||'Player';
+  const code=document.getElementById('joinCode').value.trim().toUpperCase();
+  if(code.length<4) return toast('Enter a valid lobby code.','warn');
+  connectWS(()=>wsSend({type:'join_lobby',name,code}));
+}
 
-    case "lobby_state":
-      S.phase   = msg.phase;
-      S.players = msg.players;
-      updateWaitingRoom(msg);
-      if (msg.phase === "drafting" || msg.phase === "done") {
-        showScreen("draft");
-        updateDraftPlayerList(msg.players);
-      }
-      break;
-
-    case "pack":
-      S.currentPack = msg.pack;
-      S.totalPacks  = msg.totalPacks;
-      S.packNum     = msg.packNum;
-      document.getElementById("packProgress").textContent =
-        `Pack ${msg.packNum} of ${msg.totalPacks}`;
-      renderPack(msg.pack);
-      break;
-
-    case "draft_done":
-      document.getElementById("packContainer").innerHTML =
-        `<div class="empty" style="padding:3rem;">🎉 Your draft is complete! ${S.drafted.length} cards in pool.</div>`;
-      document.getElementById("packProgress").textContent = "Done";
-      break;
-
-    case "error":
-      toast(msg.msg, "error");
-      break;
+function handleWS(msg){
+  if(msg.type==='created'||msg.type==='joined'){
+    S.playerId=msg.playerId; S.lobbyCode=msg.code; S.isHost=msg.isHost; S.mode='online';
+    showScreen('waiting');
+    document.getElementById('lobbyCodeDisplay').textContent=msg.code;
+    document.getElementById('hostConfig').classList.toggle('hidden',!S.isHost);
+    document.getElementById('guestWaiting').classList.toggle('hidden',S.isHost);
+  } else if(msg.type==='lobby_state'){
+    updateWaitingRoom(msg);
+    if(msg.phase==='drafting'||msg.phase==='done'){ showScreen('draft'); updateOnlinePlayers(msg.players); }
+  } else if(msg.type==='pack'){
+    S.totalPacks=msg.totalPacks;
+    document.getElementById('packProgress').textContent=`Pack ${msg.packNum} of ${msg.totalPacks}`;
+    renderPack(msg.pack);
+  } else if(msg.type==='draft_done'){
+    document.getElementById('packContainer').innerHTML=
+      `<div class="empty" style="padding:3rem;">🎉 Draft complete!<br><br>${S.drafted.length} cards in pool.</div>`;
+    document.getElementById('packProgress').textContent='Done';
+  } else if(msg.type==='error'){
+    toast(msg.msg,'error');
   }
 }
 
-// ══ Screens ═══════════════════════════════════════════════════════════════════
-function showScreen(name) {
-  document.getElementById("lobbyScreen").classList.toggle("hidden", name !== "lobby");
-  document.getElementById("waitingRoom").classList.toggle("hidden", name !== "waiting");
-  document.getElementById("draftScreen").classList.toggle("hidden", name !== "draft");
-  const subs = { lobby: "Host or join a draft lobby", waiting: "Waiting for players…", draft: "Draft in progress" };
-  document.getElementById("headerSub").textContent = subs[name] || "";
-}
-
-// ══ Waiting room ══════════════════════════════════════════════════════════════
-function updateWaitingRoom(msg) {
-  const players = msg.players || [];
-  document.getElementById("playerCountBadge").textContent =
-    `${players.length} player${players.length !== 1 ? "s" : ""}`;
-
-  const list = document.getElementById("waitingPlayerList");
-  list.innerHTML = "";
-  players.forEach(p => {
-    const div = document.createElement("div");
-    div.className = "player-chip";
-    div.innerHTML = `
-      <span class="dot ${p.online !== false ? "dot-online" : "dot-offline"}"></span>
-      <span class="pname">${esc(p.name)}</span>
-      ${p.id === S.playerId ? '<span class="ptag">YOU</span>' : ""}
-      ${p.id === msg.hostId ? '<span class="ptag">HOST</span>' : ""}
+function updateWaitingRoom(msg){
+  const players=msg.players||[];
+  document.getElementById('playerCountBadge').textContent=`${players.length} player${players.length!==1?'s':''}`;
+  const list=document.getElementById('waitingPlayerList');
+  list.innerHTML='';
+  players.forEach(p=>{
+    const div=document.createElement('div'); div.className='player-chip';
+    div.innerHTML=`
+      <span class="dot ${p.online!==false?'dot-online':'dot-offline'}"></span>
+      <span style="flex:1;font-weight:600;">${esc(p.name)}</span>
+      ${p.id===S.playerId?'<span style="font-size:.7rem;color:var(--dim)">YOU</span>':''}
+      ${p.id===msg.hostId?'<span style="font-size:.7rem;color:var(--gold)">HOST</span>':''}
     `;
     list.appendChild(div);
   });
 }
 
-// ══ Set config (host) ═════════════════════════════════════════════════════════
-async function initSetOptions() {
-  if (S.availableSets.length) return;
-  const res = await fetch("/api/sets");
-  S.availableSets = await res.json();
-  addSetRow();
-}
-
-function setOptions() {
-  return S.availableSets.map(s => `<option value="${s.id}">${s.id} — ${s.name}</option>`).join("");
-}
-
-function addSetRow() {
-  if (!S.availableSets.length) { initSetOptions(); return; }
-  const row = document.createElement("div");
-  row.className = "set-row";
-  row.innerHTML = `
-    <select>${setOptions()}</select>
-    <label>Packs</label>
-    <input type="number" value="24" min="1" max="200" step="1">
-    <button class="btn-icon" title="Remove" onclick="this.closest('.set-row').remove();pushConfig();">✕</button>
-  `;
-  row.querySelector("select").addEventListener("change", pushConfig);
-  row.querySelector("input").addEventListener("input", pushConfig);
-  document.getElementById("setRows").appendChild(row);
-  pushConfig();
-}
-
-function pushConfig() {
-  const rows = [...document.querySelectorAll(".set-row")];
-  const config = rows.map(r => ({
-    set: r.querySelector("select").value,
-    packs: parseInt(r.querySelector("input").value) || 1,
-  }));
-  const total = config.reduce((s, c) => s + c.packs, 0);
-  document.getElementById("totalPacksBadge").textContent = `${total} pack${total !== 1 ? "s" : ""}`;
-  wsSend({ type: "set_config", config });
-}
-
-function startDraft() {
-  const rows = [...document.querySelectorAll(".set-row")];
-  if (!rows.length) return toast("Add at least one set.", "warn");
-  const btn = document.getElementById("startBtn");
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Building box…';
-  wsSend({ type: "start_draft" });
-  setTimeout(() => { btn.disabled = false; btn.textContent = "Start Draft"; }, 3000);
-}
-
-function copyCode() {
-  navigator.clipboard.writeText(S.lobbyCode).then(() => toast("Code copied!"));
-}
-
-// ══ Draft player list ═════════════════════════════════════════════════════════
-function updateDraftPlayerList(players) {
-  const el = document.getElementById("draftPlayerList");
-  el.innerHTML = "";
-  (players || []).forEach(p => {
-    const div = document.createElement("div");
-    div.className = "draft-player-row";
-    div.innerHTML = `
-      <span class="dot ${p.online !== false ? "dot-online" : "dot-offline"}"></span>
-      <span class="dpname">${esc(p.name)}${p.id === S.playerId ? " (you)" : ""}</span>
-      <span class="dptag">${p.drafted} picked · ${p.packsLeft || 0} left</span>
+function updateOnlinePlayers(players){
+  const el=document.getElementById('draftPlayerList'); el.innerHTML='';
+  (players||[]).forEach(p=>{
+    const div=document.createElement('div'); div.className='draft-player-row';
+    div.innerHTML=`
+      <span class="dot ${p.online!==false?'dot-online':'dot-offline'}"></span>
+      <span class="dpname">${esc(p.name)}${p.id===S.playerId?' (you)':''}</span>
+      <span class="dptag">${p.drafted} picked · ${p.packsLeft||0} left</span>
     `;
     el.appendChild(div);
   });
 }
 
-// ══ Image cache ═══════════════════════════════════════════════════════════════
-async function fetchImage(name) {
-  if (name in S.imageCache) return S.imageCache[name];
-  try {
-    const res = await fetch(
-      `https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(name)}&num=1&offset=0`
-    );
-    if (!res.ok) throw 0;
-    const data = await res.json();
-    const url = data.data[0].card_images[0].image_url_small || data.data[0].card_images[0].image_url;
-    S.imageCache[name] = url;
-    return url;
-  } catch {
-    S.imageCache[name] = null;
-    return null;
+function renderDraftPlayers(){
+  const el=document.getElementById('draftPlayerList'); el.innerHTML='';
+  const you=document.createElement('div'); you.className='draft-player-row';
+  you.innerHTML=`<span class="dot dot-online"></span><span class="dpname">You</span><span class="dptag">${S.drafted.length} picked</span>`;
+  el.appendChild(you);
+  S.aiPlayers.forEach(ai=>{
+    const div=document.createElement('div'); div.className='draft-player-row';
+    div.innerHTML=`<span class="dot dot-ai"></span><span class="dpname">${esc(ai.name)}</span><span class="dptag">${ai.drafted.length} picked · done</span>`;
+    el.appendChild(div);
+  });
+}
+
+function startOnlineDraft(){
+  const rows=[...document.querySelectorAll('#onlineSetRows .set-row')];
+  if(!rows.length) return toast('Add at least one set.','warn');
+  const btn=document.getElementById('startBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Building…';
+  wsSend({type:'start_draft'});
+  setTimeout(()=>{btn.disabled=false;btn.textContent='Start Draft';},4000);
+}
+function copyCode(){ navigator.clipboard.writeText(S.lobbyCode).then(()=>toast('Code copied!')); }
+
+// ══ Set config ════════════════════════════════════════════════════════════════
+function setOptions(){
+  return (S.availableSets||[]).map(s=>`<option value="${esc(s.id)}">${esc(s.id)} — ${esc(s.name)}</option>`).join('');
+}
+function addSetRow(target){
+  const cid=target==='offline'?'offlineSetRows':'onlineSetRows';
+  const row=document.createElement('div'); row.className='set-row';
+  row.innerHTML=`
+    <select>${setOptions()}</select>
+    <label>Packs</label>
+    <input type="number" value="24" min="1" max="200">
+    <button class="btn-icon" onclick="this.closest('.set-row').remove();${target==='online'?'pushOnlineConfig();':''}">✕</button>
+  `;
+  if(target==='online'){
+    row.querySelector('select').addEventListener('change',pushOnlineConfig);
+    row.querySelector('input').addEventListener('input',pushOnlineConfig);
   }
+  document.getElementById(cid).appendChild(row);
+  if(target==='online') pushOnlineConfig();
+}
+function pushOnlineConfig(){
+  const rows=[...document.querySelectorAll('#onlineSetRows .set-row')];
+  const config=rows.map(r=>({set:r.querySelector('select').value,packs:parseInt(r.querySelector('input').value)||1}));
+  const total=config.reduce((s,c)=>s+c.packs,0);
+  document.getElementById('totalPacksBadge').textContent=`${total} packs`;
+  wsSend({type:'set_config',config});
 }
 
-// ══ Rarity helpers ════════════════════════════════════════════════════════════
-function rarityClass(r) {
-  return { "Secret Rare":"r-secret","Ultra Rare":"r-ultra","Super Rare":"r-super","Rare":"r-rare","Common":"r-common" }[r] || "r-common";
-}
-function esc(s) {
-  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+// ══ AI count ══════════════════════════════════════════════════════════════════
+function changeAI(d){
+  const el=document.getElementById('aiCount');
+  el.textContent=Math.max(0,Math.min(7,parseInt(el.textContent)+d));
 }
 
-// ══ Pack rendering ════════════════════════════════════════════════════════════
-async function renderPack(pack) {
-  const container = document.getElementById("packContainer");
-  container.innerHTML = "";
-  const grid = document.createElement("div");
-  grid.className = "pack-grid";
+// ══ Images ════════════════════════════════════════════════════════════════════
+async function fetchImg(name){
+  if(name in S.imageCache) return S.imageCache[name];
+  try{
+    const r=await fetch(`https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(name)}&num=1&offset=0`);
+    if(!r.ok) throw 0;
+    const d=await r.json();
+    const url=d.data[0].card_images[0].image_url_small||d.data[0].card_images[0].image_url;
+    S.imageCache[name]=url; return url;
+  }catch{S.imageCache[name]=null;return null;}
+}
+
+// ══ Rendering ══════════════════════════════════════════════════════════════════
+function rc(r){return{'Secret Rare':'r-secret','Ultra Rare':'r-ultra','Super Rare':'r-super','Rare':'r-rare','Common':'r-common'}[r]||'r-common';}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+async function renderPack(pack){
+  const container=document.getElementById('packContainer');
+  container.innerHTML='';
+  const grid=document.createElement('div'); grid.className='pack-grid';
   container.appendChild(grid);
-
-  const items = pack.map(card => {
-    const div = document.createElement("div");
-    div.className = "card";
-    div.dataset.rarity = card.rarity || "";
-    div.innerHTML = `
+  const items=pack.map(card=>{
+    const div=document.createElement('div'); div.className='card'; div.dataset.rarity=card.rarity||'';
+    div.innerHTML=`
       <div class="card-img-wrap"><div class="img-placeholder"><span class="spinner"></span></div></div>
-      <div class="card-info">
-        <div class="card-name">${esc(card.name)}</div>
-        <div class="card-rarity ${rarityClass(card.rarity)}">${esc(card.rarity || "")}</div>
-      </div>
+      <div class="card-info"><div class="card-name">${esc(card.name)}</div><div class="card-rarity ${rc(card.rarity)}">${esc(card.rarity||'')}</div></div>
       <button class="card-btn">Pick</button>
     `;
-    div.querySelector(".card-btn").addEventListener("click", () => pickCard(card));
+    div.querySelector('.card-btn').addEventListener('click',()=>pickCard(card));
     grid.appendChild(div);
-    return { div, card };
+    return{div,card};
   });
-
-  await Promise.all(items.map(async ({ div, card }) => {
-    const url = await fetchImage(card.name);
-    const wrap = div.querySelector(".card-img-wrap");
-    wrap.innerHTML = url
-      ? `<img src="${url}" alt="${esc(card.name)}" loading="lazy">`
-      : `<div class="img-placeholder" style="font-size:.62rem;">${esc(card.name)}</div>`;
+  // Scroll to pack on mobile
+  if(window.innerWidth<=800) window.scrollTo({top:0,behavior:'smooth'});
+  await Promise.all(items.map(async({div,card})=>{
+    const url=await fetchImg(card.name);
+    const wrap=div.querySelector('.card-img-wrap');
+    wrap.innerHTML=url?`<img src="${url}" alt="${esc(card.name)}" loading="lazy">`
+      :`<div class="img-placeholder" style="font-size:.6rem;">${esc(card.name)}</div>`;
   }));
 }
 
-function pickCard(card) {
-  document.querySelectorAll(".card-btn").forEach(b => b.disabled = true);
+function pickCard(card){
+  document.querySelectorAll('.card-btn').forEach(b=>b.disabled=true);
   S.drafted.push(card);
-  wsSend({ type: "pick", card });
-  renderPool();
-  updateDeckStats();
+  if(S.mode==='online') wsSend({type:'pick',card});
+  renderPool(); updateDeckStats(); renderDraftPlayers();
   toast(`Picked: ${card.name}`);
+  if(S.mode==='offline') offlineNextPack();
 }
 
-// ══ Pool ═══════════════════════════════════════════════════════════════════════
-async function renderPool() {
-  const container = document.getElementById("poolContainer");
-  const count = S.drafted.length;
-  document.getElementById("poolCount").textContent = `${count} card${count !== 1 ? "s" : ""}`;
-  if (!count) { container.innerHTML = '<div class="empty">Drafted cards will appear here.</div>'; return; }
-
-  const rarityOrder = ["Secret Rare","Ultra Rare","Super Rare","Rare","Common"];
-  const sorted = [...S.drafted].sort((a,b) =>
-    (rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity)) || a.name.localeCompare(b.name)
-  );
-
-  const list = document.createElement("div");
-  list.className = "pool-list";
-  container.innerHTML = "";
-
-  const items = sorted.map(card => {
-    const div = document.createElement("div");
-    div.className = "pool-item";
-    div.innerHTML = `
+async function renderPool(){
+  const container=document.getElementById('poolContainer');
+  const count=S.drafted.length;
+  document.getElementById('poolCount').textContent=`${count} card${count!==1?'s':''}`;
+  if(!count){container.innerHTML='<div class="empty">Drafted cards will appear here.</div>';return;}
+  const order=['Secret Rare','Ultra Rare','Super Rare','Rare','Common'];
+  const sorted=[...S.drafted].sort((a,b)=>(order.indexOf(a.rarity)-order.indexOf(b.rarity))||a.name.localeCompare(b.name));
+  const list=document.createElement('div'); list.className='pool-list';
+  container.innerHTML='';
+  const items=sorted.map(card=>{
+    const div=document.createElement('div'); div.className='pool-item';
+    div.innerHTML=`
       <img src="" alt="${esc(card.name)}" style="opacity:.3;">
-      <div class="pool-item-info">
-        <div class="pool-item-name">${esc(card.name)}</div>
-        <div class="card-rarity ${rarityClass(card.rarity)}">${esc(card.rarity||"")}</div>
-      </div>
-      <button class="btn-outline" style="font-size:.72rem;padding:.22rem .55rem;">→ Main</button>
-      <button class="btn-ghost"   style="font-size:.72rem;padding:.22rem .55rem;">Side</button>
+      <div class="pool-item-info"><div class="pool-item-name">${esc(card.name)}</div><div class="card-rarity ${rc(card.rarity)}">${esc(card.rarity||'')}</div></div>
+      <button class="btn-outline" style="font-size:.76rem;min-height:38px;">→ Main</button>
+      <button class="btn-ghost"   style="font-size:.76rem;min-height:38px;">Side</button>
     `;
-    div.querySelectorAll("button")[0].addEventListener("click", () => addToDeck(card, "main"));
-    div.querySelectorAll("button")[1].addEventListener("click", () => addToDeck(card, "side"));
+    div.querySelectorAll('button')[0].addEventListener('click',()=>addToDeck(card,'main'));
+    div.querySelectorAll('button')[1].addEventListener('click',()=>addToDeck(card,'side'));
     list.appendChild(div);
-    return { div, card };
+    return{div,card};
   });
-
   container.appendChild(list);
-
-  items.forEach(async ({ div, card }) => {
-    const url = await fetchImage(card.name);
-    const img = div.querySelector("img");
-    if (url) { img.src = url; img.style.opacity = "1"; }
-    else img.style.display = "none";
+  items.forEach(async({div,card})=>{
+    const url=await fetchImg(card.name);
+    const img=div.querySelector('img');
+    if(url){img.src=url;img.style.opacity='1';}else img.style.display='none';
   });
 }
 
 // ══ Deck builder ══════════════════════════════════════════════════════════════
-function addToDeck(card, zone) {
-  const deck = zone === "main" ? S.mainDeck : S.sideDeck;
-  const max  = zone === "main" ? 3 : 15;
-  const ex   = deck.find(e => e.name === card.name);
-  if (ex) {
-    if (ex.qty >= max) return toast(`Max copies reached for ${card.name}`, "warn");
-    ex.qty++;
-  } else {
-    deck.push({ name: card.name, rarity: card.rarity, qty: 1 });
-  }
-  renderDeck(zone); updateDeckStats(); switchTab(zone);
+function addToDeck(card,zone){
+  const deck=zone==='main'?S.mainDeck:S.sideDeck, max=zone==='main'?3:15;
+  const ex=deck.find(e=>e.name===card.name);
+  if(ex){if(ex.qty>=max)return toast(`Max copies for ${card.name}`,'warn');ex.qty++;}
+  else deck.push({name:card.name,rarity:card.rarity,qty:1});
+  renderDeck(zone);updateDeckStats();switchTab(zone);
+}
+function removeFromDeck(name,zone){
+  const deck=zone==='main'?S.mainDeck:S.sideDeck, idx=deck.findIndex(e=>e.name===name);
+  if(idx===-1)return;
+  deck[idx].qty>1?deck[idx].qty--:deck.splice(idx,1);
+  renderDeck(zone);updateDeckStats();
+}
+function clearDeck(zone){ if(zone==='main')S.mainDeck=[];else S.sideDeck=[]; renderDeck(zone);updateDeckStats(); }
+function renderDeck(zone){
+  const deck=zone==='main'?S.mainDeck:S.sideDeck;
+  const listEl=document.getElementById(zone==='main'?'mainDeckList':'sideDeckList');
+  if(!deck.length){listEl.innerHTML='<div class="empty" style="padding:1rem;">Empty</div>';return;}
+  const order=['Secret Rare','Ultra Rare','Super Rare','Rare','Common'];
+  listEl.innerHTML='';
+  [...deck].sort((a,b)=>(order.indexOf(a.rarity)-order.indexOf(b.rarity))||a.name.localeCompare(b.name)).forEach(e=>{
+    const div=document.createElement('div'); div.className='deck-item';
+    div.innerHTML=`
+      <span class="deck-item-qty">×${e.qty}</span>
+      <div style="flex:1;min-width:0;"><div class="deck-item-name">${esc(e.name)}</div><div class="card-rarity ${rc(e.rarity)}">${esc(e.rarity||'')}</div></div>
+      <div class="deck-item-actions"><button class="btn-ghost btn-sm">+</button><button class="btn-danger btn-sm">−</button></div>
+    `;
+    div.querySelectorAll('button')[0].addEventListener('click',()=>addToDeck(e,zone));
+    div.querySelectorAll('button')[1].addEventListener('click',()=>removeFromDeck(e.name,zone));
+    listEl.appendChild(div);
+  });
+}
+function updateDeckStats(){
+  document.getElementById('mainCount').textContent=S.mainDeck.reduce((s,e)=>s+e.qty,0);
+  document.getElementById('sideCount').textContent=S.sideDeck.reduce((s,e)=>s+e.qty,0);
+  document.getElementById('poolCountStat').textContent=S.drafted.length;
+}
+function switchTab(zone){
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',(i===0&&zone==='main')||(i===1&&zone==='side')));
+  document.getElementById('tab-main').classList.toggle('active',zone==='main');
+  document.getElementById('tab-side').classList.toggle('active',zone==='side');
+}
+function exportDeck(){
+  if(!S.mainDeck.length&&!S.sideDeck.length)return toast('Deck is empty.','warn');
+  let t='# Main Deck\n'; S.mainDeck.forEach(e=>t+=`${e.qty}x ${e.name}\n`);
+  if(S.sideDeck.length){t+='\n# Side Deck\n';S.sideDeck.forEach(e=>t+=`${e.qty}x ${e.name}\n`);}
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));
+  a.download='draft-deck.txt';a.click();toast('Deck exported!');
 }
 
-function removeFromDeck(name, zone) {
-  const deck = zone === "main" ? S.mainDeck : S.sideDeck;
-  const idx  = deck.findIndex(e => e.name === name);
-  if (idx === -1) return;
-  deck[idx].qty > 1 ? deck[idx].qty-- : deck.splice(idx, 1);
-  renderDeck(zone); updateDeckStats();
+// ══ Mobile nav ════════════════════════════════════════════════════════════════
+function setMobileSection(n){
+  S.curMobileSection=n;
+  [0,1,2].forEach(i=>{
+    const sec=document.getElementById(`mobileSection${i}`);
+    const btn=document.getElementById(`mnav${i}`);
+    if(sec) sec.classList.toggle('ms-active',i===n);
+    if(btn) btn.classList.toggle('active',i===n);
+  });
 }
 
-function clearDeck(zone) {
-  if (zone === "main") S.mainDeck = []; else S.sideDeck = [];
-  renderDeck(zone); updateDeckStats();
-}
-
-function renderDeck(zone) {
-  const deck  = zone === "main" ? S.mainDeck : S.sideDeck;
-  const listEl = document.getElementById(zone === "main" ? "mainDeckList" : "sideDeckList");
-  if (!deck.length) { listEl.innerHTML = '<div class="empty" style="padding:1rem;">Empty</div>'; return; }
-
-  const rarityOrder = ["Secret Rare","Ultra Rare","Super Rare","Rare","Common"];
-  listEl.innerHTML = "";
-  [...deck].sort((a,b) => (rarityOrder.indexOf(a.rarity)-rarityOrder.indexOf(b.rarity))||a.name.localeCompare(b.name))
-    .forEach(entry => {
-      const div = document.createElement("div");
-      div.className = "deck-item";
-      div.innerHTML = `
-        <span class="deck-item-qty">×${entry.qty}</span>
-        <div style="flex:1;min-width:0;">
-          <div class="deck-item-name">${esc(entry.name)}</div>
-          <div class="card-rarity ${rarityClass(entry.rarity)}">${esc(entry.rarity||"")}</div>
-        </div>
-        <div class="deck-item-actions">
-          <button class="btn-ghost btn-sm" title="Add copy">+</button>
-          <button class="btn-danger btn-sm" title="Remove copy">−</button>
-        </div>
-      `;
-      div.querySelectorAll("button")[0].addEventListener("click", () => addToDeck(entry, zone));
-      div.querySelectorAll("button")[1].addEventListener("click", () => removeFromDeck(entry.name, zone));
-      listEl.appendChild(div);
-    });
-}
-
-function updateDeckStats() {
-  document.getElementById("mainCount").textContent = S.mainDeck.reduce((s,e)=>s+e.qty,0);
-  document.getElementById("sideCount").textContent = S.sideDeck.reduce((s,e)=>s+e.qty,0);
-  document.getElementById("poolCountStat").textContent = S.drafted.length;
-}
-
-function switchTab(zone) {
-  document.querySelectorAll(".tab-btn").forEach((b,i) =>
-    b.classList.toggle("active",(i===0&&zone==="main")||(i===1&&zone==="side"))
+// ══ Screen router ══════════════════════════════════════════════════════════════
+function showScreen(name){
+  ['modeScreen','offlineSetup','lobbyScreen','waitingRoom','draftScreen'].forEach(id=>
+    document.getElementById(id).classList.toggle('hidden',id!==name+'Screen'&&id!==name)
   );
-  document.getElementById("tab-main").classList.toggle("active", zone==="main");
-  document.getElementById("tab-side").classList.toggle("active", zone==="side");
-}
+  // Explicit mapping (some IDs don't match the pattern)
+  document.getElementById('modeScreen').classList.toggle('hidden',name!=='mode');
+  document.getElementById('offlineSetup').classList.toggle('hidden',name!=='offline');
+  document.getElementById('lobbyScreen').classList.toggle('hidden',name!=='lobby');
+  document.getElementById('waitingRoom').classList.toggle('hidden',name!=='waiting');
+  document.getElementById('draftScreen').classList.toggle('hidden',name!=='draft');
+  document.getElementById('mobileNav').classList.toggle('hidden',name!=='draft');
 
-function exportDeck() {
-  if (!S.mainDeck.length && !S.sideDeck.length) return toast("Deck is empty.", "warn");
-  let text = "# Main Deck\n";
-  S.mainDeck.forEach(e => text += `${e.qty}x ${e.name}\n`);
-  if (S.sideDeck.length) { text += "\n# Side Deck\n"; S.sideDeck.forEach(e => text += `${e.qty}x ${e.name}\n`); }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
-  a.download = "draft-deck.txt"; a.click();
-  toast("Deck exported!");
+  const subs={mode:'Choose your mode',offline:'Set up your draft',lobby:'Host or join a lobby',waiting:'Waiting for players…',draft:'Draft in progress'};
+  document.getElementById('headerSub').textContent=subs[name]||'';
+
+  if(name==='offline'&&!document.getElementById('offlineSetRows').children.length) addSetRow('offline');
+  if(name==='waiting'&&S.isHost&&!document.getElementById('onlineSetRows').children.length) addSetRow('online');
+  if(name==='draft'){
+    const isMobile=window.innerWidth<=800;
+    if(isMobile){
+      setMobileSection(0);
+    } else {
+      // On desktop always show all sections
+      [0,1,2].forEach(i=>document.getElementById(`mobileSection${i}`).classList.add('ms-active'));
+    }
+  }
 }
 
 // ══ Toast ══════════════════════════════════════════════════════════════════════
 let toastTimer;
-function toast(msg, type="ok") {
-  const el = document.getElementById("toast");
-  el.textContent = msg;
-  el.style.borderColor = type==="warn"?"#c9a84c":type==="error"?"#e05555":"#55b88a";
-  el.style.color       = type==="warn"?"#c9a84c":type==="error"?"#e05555":"#55b88a";
-  el.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove("show"), 2400);
+function toast(msg,type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg;
+  el.style.borderColor=type==='warn'?'#c9a84c':type==='error'?'#e05555':'#55b88a';
+  el.style.color=type==='warn'?'#c9a84c':type==='error'?'#e05555':'#55b88a';
+  el.classList.add('show');clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
 }
 
-// ══ Splash ════════════════════════════════════════════════════════════════════
-function dismissSplash() {
-  const el = document.getElementById("splash");
-  el.classList.add("fade-out");
-  setTimeout(() => el.remove(), 650);
+// ══ Splash ══════════════════════════════════════════════════════════════════
+function dismissSplash(){
+  const el=document.getElementById('splash');
+  if(!el||el.classList.contains('fade-out'))return;
+  el.classList.add('fade-out');setTimeout(()=>el.remove(),650);
 }
 
-// ══ Boot ══════════════════════════════════════════════════════════════════════
-// Pre-load set list so host config is instant
-fetch("/api/sets").then(r=>r.json()).then(sets => {
-  S.availableSets = sets;
+// ══ Resize handler ════════════════════════════════════════════════════════════
+window.addEventListener('resize',()=>{
+  if(document.getElementById('draftScreen').classList.contains('hidden'))return;
+  if(window.innerWidth>800){
+    [0,1,2].forEach(i=>document.getElementById(`mobileSection${i}`).classList.add('ms-active'));
+  } else {
+    setMobileSection(S.curMobileSection);
+  }
 });
 
-// Host config panel initialises when waiting room shows and user is host
-const _origShowScreen = showScreen;
-// Patch: after showing waiting room as host, add default set row
-const __showScreen = showScreen;
-window.showScreen = function(name) {
-  __showScreen(name);
-  if (name === "waiting" && S.isHost && document.getElementById("setRows").children.length === 0) {
-    initSetOptions();
-  }
-};
+// ══ Boot ══════════════════════════════════════════════════════════════════════
+fetch('/api/sets').then(r=>r.json()).then(sets=>{ S.availableSets=sets; })
+  .catch(()=>console.warn('Could not load sets from server'));
 </script>
 </body>
 </html>
